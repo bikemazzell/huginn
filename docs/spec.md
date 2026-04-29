@@ -367,6 +367,9 @@ Computed in `eval/metrics.py`:
 | Metric | Logic |
 |---|---|
 | `retrieval_hit_rate` | At least one returned citation appears in expected citations |
+| `precision_at_k` | Mean per-case precision over returned citations for cases with expected citations |
+| `recall_at_k` | Mean per-case recall over expected citations for cases with expected citations |
+| `mean_reciprocal_rank` | Mean reciprocal rank of the first relevant returned citation for cases with expected citations |
 | `citation_correctness` | Returned citations exactly match expected citations |
 | `groundedness` | Citation correct AND answer contains all expected substrings (or no-answer correct for negatives) |
 | `answer_trait_match` | Answer text contains all expected substrings |
@@ -375,6 +378,7 @@ Computed in `eval/metrics.py`:
 ### 11.3 Eval Runner
 
 `scripts/run_eval.py` loads config, loads dataset, builds runtime clients, runs the eval graph, and prints the report as JSON.
+If multiple `--config` paths are provided, it treats the first run as baseline and emits cross-run comparison deltas for the core metrics.
 
 ---
 
@@ -398,7 +402,7 @@ Computed in `eval/metrics.py`:
 
 Model name matching normalizes by stripping `.gguf` suffix and comparing case-insensitively with prefix matching.
 
-Known issue: `_check_endpoint` in `scripts/preflight.py` references `urllib.request` without importing it. The urllib branch raises `NameError` and silently falls through to a `curl` subprocess. Either fix the import or delete the helper and route reachability through `huginn.preflight.fetch_model_ids`.
+Current limitation: PDF and OCR dependency checks in `scripts/preflight.py` are still placeholders rather than real dependency/tooling checks.
 
 ---
 

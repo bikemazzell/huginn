@@ -29,7 +29,6 @@ Still planned for later:
 - query rewriting
 - reranking
 - answer validation
-- richer eval comparisons
 - additional file types
 
 ## Project Layout
@@ -55,6 +54,15 @@ Current default models in [config/runtime.yaml](config/runtime.yaml):
 
 - chat: `Qwen3.5-9B-Q4_K_M.gguf`
 - embeddings: `nomic-embed-text-v2-moe`
+
+To start both servers in one shot (useful for smoke and e2e runs), use the launcher script:
+
+```bash
+HUGINN_CHAT_MODEL=/path/to/Qwen3.5-9B-Q4_K_M.gguf \
+  python scripts/start_llama_servers.py
+```
+
+The script blocks until both endpoints respond on `/v1/models`, then keeps running until interrupted; Ctrl-C terminates both child servers. See `--help` for port, context, and `-ngl` overrides. The embed model defaults to the path in `models/`; override with `HUGINN_EMBED_MODEL` or `--embed-model`.
 
 There is a more detailed setup note in [docs/local-llamacpp-setup.md](docs/local-llamacpp-setup.md).
 
@@ -144,6 +152,9 @@ The store lives in [src/huginn/store/sqlite.py](src/huginn/store/sqlite.py). Sch
 The local eval runner currently reports:
 
 - retrieval hit rate
+- precision@k
+- recall@k
+- mean reciprocal rank
 - citation correctness
 - groundedness
 - answer trait match

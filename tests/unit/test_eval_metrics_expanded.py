@@ -30,3 +30,6 @@ def test_build_eval_report_includes_retrieval_and_groundedness_metrics() -> None
 
     assert report["retrieval_hit_rate"] == 1.0
     assert report["groundedness"] == 1.0
+    assert report["precision_at_k"] == 1.0
+    assert report["recall_at_k"] == 1.0
+    assert report["mean_reciprocal_rank"] == 1.0

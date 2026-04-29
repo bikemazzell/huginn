@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -11,22 +12,66 @@ if str(SRC) not in sys.path:
 
 from huginn.config import load_runtime_config
 from huginn.eval.dataset import load_eval_dataset
+from huginn.eval.report import build_eval_comparison
 from huginn.graph.eval_graph import run_eval
 from huginn.llm.factory import build_runtime_clients
 
 
-def main() -> int:
-    config = load_runtime_config(ROOT / "config" / "runtime.yaml")
-    cases = load_eval_dataset(ROOT / "tests" / "fixtures" / "eval" / "dataset.json")
-    clients = build_runtime_clients(config.models)
-    report = run_eval(
-        config,
-        db_path=ROOT / "data" / "huginn.db",
-        cases=cases,
-        embedder=clients.embedder,
-        chat_model=clients.chat,
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run Huginn evals for one or more configs.")
+    parser.add_argument(
+        "--config",
+        dest="configs",
+        action="append",
+        help="Path to a runtime config. Repeat to compare multiple runs. First config is baseline.",
     )
-    print(json.dumps(report, indent=2))
+    parser.add_argument(
+        "--db-path",
+        default=str(ROOT / "data" / "huginn.db"),
+        help="Path to the SQLite database to query.",
+    )
+    parser.add_argument(
+        "--dataset",
+        default=str(ROOT / "tests" / "fixtures" / "eval" / "dataset.json"),
+        help="Path to the eval dataset JSON file.",
+    )
+    return parser.parse_args()
+
+
+def build_eval_payload(reports: dict[str, dict[str, float | int]]) -> dict[str, object]:
+    report_names = list(reports)
+    baseline_name = report_names[0]
+    comparisons = [
+        build_eval_comparison(baseline_name, reports[baseline_name], candidate_name, reports[candidate_name])
+        for candidate_name in report_names[1:]
+    ]
+    if comparisons:
+        return {
+            "runs": reports,
+            "comparisons": comparisons,
+        }
+    return reports[baseline_name]
+
+
+def main() -> int:
+    args = parse_args()
+    config_paths = [Path(path) for path in (args.configs or [str(ROOT / "config" / "runtime.yaml")])]
+    cases = load_eval_dataset(args.dataset)
+    reports: dict[str, dict[str, float | int]] = {}
+
+    for config_path in config_paths:
+        config = load_runtime_config(config_path)
+        clients = build_runtime_clients(config.models)
+        reports[config_path.stem] = run_eval(
+            config,
+            db_path=args.db_path,
+            cases=cases,
+            embedder=clients.embedder,
+            chat_model=clients.chat,
+        )
+
+    payload = build_eval_payload(reports)
+    print(json.dumps(payload, indent=2))
     return 0
 
 

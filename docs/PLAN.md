@@ -37,11 +37,10 @@ This follow-up block is complete:
 
 Once Phase 1.1 is complete, the recommended next order is:
 
-1. threshold-based refusal for weak evidence
-2. reranking
-3. richer eval comparisons across baseline versus Phase 2 variants
-4. query rewriting
-5. answer validation
+1. reranking
+2. query rewriting
+3. answer validation
+4. eval CI gating and broader dataset coverage
 
 ## Goal
 
@@ -534,18 +533,17 @@ These notes are distilled from production RAG systems on other domains and adapt
 
 - The Phase 1 path uses a single chat model for the final answer. When Phase 2 query rewriting lands, it should be run through a smaller/cheaper model than the answerer (smaller local quant, or just a tighter system prompt with shorter max tokens). Heavy reasoning belongs only on the user-facing answer step.
 - Prompt structure already in place: system prompt loaded from `config/prompts/answer.txt`, user question, and retrieved chunk(s) as context. The prompt remains intentionally simple for Phase 1.
-- **Threshold-based refusal**: Phase 1 returns the no-answer message only when retrieval returns **zero** chunks. It does not refuse when retrieval returns weakly-relevant chunks. That is the same fabricate-from-weak-evidence failure mode that the no-answer policy is meant to prevent. Phase 2 should add a configurable score threshold (or distance ceiling for dense, or cosine floor for lexical) below which the system refuses with the no-answer message rather than passing the chunk to the LLM. This is independent of reranking and is a real gap today.
+- **Threshold-based refusal**: implemented. Phase 1 now refuses when retrieval yields only weak matches by applying configurable lexical and dense retrieval thresholds before answer generation.
 - Long-context note: frontier models in 2026 ship with 1M+ token windows, which loosens the retrieval-precision constraint for high-stakes paths. Local llama.cpp models typically run 8k-32k, so this lever applies only if remote endpoints are added later. Even with long context, retrieval still matters for cost, latency, and the audit trail behind every cited claim.
 
 #### Evaluation
 
 - The Phase 1 eval dataset (`tests/fixtures/eval/dataset.json`) is hand-curated, which is the right pattern. Production analogues call this a "gold set" curated by domain experts, refreshed as the corpus changes. The CLI/eval runner is in place, the harness scaffolding is fine.
-- Current metrics: retrieval hit rate, citation correctness, groundedness, answer-trait match, no-answer correctness. **Missing for Phase 2 comparison work**:
-  - `recall@k` and `precision@k` per case, so retrieval-depth changes can be tracked numerically rather than as a binary hit/miss.
-  - Mean Reciprocal Rank across the dataset, which captures "the right chunk was retrieved but not in position 1" — exactly the signal a reranker should improve.
+- Current metrics: retrieval hit rate, citation correctness, groundedness, answer-trait match, no-answer correctness, `precision@k`, `recall@k`, and mean reciprocal rank.
+- Still missing for Phase 2 comparison work:
   - Faithfulness as a generation metric distinct from groundedness (does the answer claim only what the retrieved chunks actually say?).
 - External harnesses to know about: RAGAS is the most common in 2026, DeepEval and Braintrust are alternatives. Adopting one is optional — the local report dict is enough for Phase 1, but if Phase 2 needs richer per-case breakdowns, RAGAS-style metric definitions are a sensible reference.
-- Regression discipline: every retrieval, prompt, or model change should run the eval set and gate merge on no regression. Today the test suite covers structural correctness; the eval set is run manually via `scripts/run_eval.py`. Wiring eval into CI is a small piece of work that would close the loop.
+- Regression discipline: every retrieval, prompt, or model change should run the eval set and gate merge on no regression. Today `scripts/run_eval.py` can compare multiple configs and emit metric deltas; wiring that into CI is the next small piece of work.
 
 ---
 
@@ -790,7 +788,6 @@ Current note:
 
 Open implementation gaps that still matter despite the green checklist:
 - Phase 2 behaviour is not yet started. Earlier no-op stubs were removed in a cleanup pass; new modules will be added when each Phase 2 feature is implemented.
-- weak-evidence refusal is still too permissive: Phase 1 refuses only on zero retrieval, not on low-quality retrieval.
 - `scripts/preflight.py` still hardcodes PDF/OCR dependency success instead of checking real dependencies.
 
 ---
@@ -818,7 +815,7 @@ Build:
 
 Status:
 - the Phase 1 baseline is stable enough to use as the comparison point for Phase 2 work
-- remaining debt: weak-evidence refusal, and the hardcoded PDF/OCR dependency checks
+- remaining debt: reranking/query-rewrite/validation work, and the hardcoded PDF/OCR dependency checks
 
 ### Phase 2
 

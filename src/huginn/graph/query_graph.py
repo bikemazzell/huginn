@@ -6,6 +6,7 @@ from langgraph.graph import END, StateGraph
 from huginn.answer.generate import ChatModel, generate_answer
 from huginn.config import RuntimeConfig
 from huginn.retrieve.basic import Embedder, retrieve_top_chunks
+from huginn.retrieve.rerank import rerank_chunks
 from huginn.schemas import QueryAnswer, RetrievedChunk
 from huginn.store.sqlite import SQLiteStore
 
@@ -30,9 +31,11 @@ def run_query(
 ) -> QueryAnswer:
     graph = StateGraph(QueryState)
     graph.add_node("retrieve", _retrieve)
+    graph.add_node("rerank", _rerank)
     graph.add_node("answer", _answer)
     graph.set_entry_point("retrieve")
-    graph.add_edge("retrieve", "answer")
+    graph.add_edge("retrieve", "rerank")
+    graph.add_edge("rerank", "answer")
     graph.add_edge("answer", END)
     compiled = graph.compile()
     result = compiled.invoke(
@@ -53,9 +56,9 @@ def _retrieve(state: QueryState) -> QueryState:
     store = SQLiteStore(state["db_path"])
     try:
         chunks = retrieve_top_chunks(
-            store,
+            store=store,
             question=state["question"],
-            top_k=state["config"].indexing.top_k,
+            top_k=_retrieve_limit(state["config"]),
             embedder=state["embedder"],
             min_lexical_score=state["config"].indexing.min_lexical_score,
             max_dense_distance=state["config"].indexing.max_dense_distance,
@@ -63,6 +66,23 @@ def _retrieve(state: QueryState) -> QueryState:
     finally:
         store.close()
     return {**state, "chunks": chunks}
+
+
+def _rerank(state: QueryState) -> QueryState:
+    if not state["config"].features.rerank:
+        return {**state, "chunks": state["chunks"][: state["config"].indexing.top_k]}
+    chunks = rerank_chunks(
+        state["question"],
+        state["chunks"],
+        limit=state["config"].indexing.top_k,
+    )
+    return {**state, "chunks": chunks}
+
+
+def _retrieve_limit(config: RuntimeConfig) -> int:
+    if not config.features.rerank:
+        return config.indexing.top_k
+    return max(config.indexing.top_k * 3, config.indexing.top_k)
 
 
 def _answer(state: QueryState) -> QueryState:

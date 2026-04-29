@@ -22,6 +22,7 @@ Implemented now:
 - LangGraph-based ingest, query, and eval flows
 - `sqlite-vec`-backed dense vector storage and nearest-neighbor retrieval
 - weak-evidence refusal via configurable dense/lexical retrieval thresholds
+- optional lexical rerank stage that widens retrieval candidates before truncating back to `top_k`
 - eval runner with `precision@k`, `recall@k`, `MRR`, and baseline-vs-variant comparison output
 - deterministic validation/unit/smoke/e2e/regression tests
 - live local runtime with separate chat and embedding endpoints
@@ -29,7 +30,6 @@ Implemented now:
 Still planned for later:
 
 - query rewriting
-- reranking
 - answer validation
 - additional file types
 

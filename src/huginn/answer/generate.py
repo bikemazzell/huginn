@@ -37,7 +37,7 @@ def generate_answer(
 
     top_chunk = chunks[0]
     context_text = "\n\n".join(chunk.text for chunk in chunks)
-    citations = [format_citation(chunk) for chunk in chunks]
+    citations = _deduplicated_citations(chunks)
     answer_text = top_chunk.text
     if chat_model is not None:
         answer_text = chat_model.complete(
@@ -53,3 +53,15 @@ def generate_answer(
         citations=citations if chat_model is not None else [format_citation(top_chunk)],
         evidence_note=f"Answered from {len(chunks)} retrieved chunk(s) for: {question}",
     )
+
+
+def _deduplicated_citations(chunks: list[RetrievedChunk]) -> list[str]:
+    seen: set[str] = set()
+    citations: list[str] = []
+    for chunk in chunks:
+        citation = format_citation(chunk)
+        if citation in seen:
+            continue
+        seen.add(citation)
+        citations.append(citation)
+    return citations

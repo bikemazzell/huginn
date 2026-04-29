@@ -73,3 +73,33 @@ def test_generate_answer_without_chat_model_preserves_top_chunk_fallback() -> No
 
     assert answer.answer_text == "Project Atlas budget is 1200 dollars."
     assert answer.citations == ["atlas.pdf#page=1"]
+
+
+def test_generate_answer_deduplicates_identical_citations_for_chat_answers() -> None:
+    chat = DummyChatModel("Vincent Valentine appears in a disclosed API user listing.")
+
+    answer = generate_answer(
+        "Who is Valentine?",
+        [
+            RetrievedChunk(
+                chunk_id=1,
+                source_path="/tmp/apis.pdf",
+                page_start=82,
+                page_end=82,
+                text='Example response includes {"name":"Vincent Valentine"}.',
+                score=0.9,
+            ),
+            RetrievedChunk(
+                chunk_id=2,
+                source_path="/tmp/apis.pdf",
+                page_start=82,
+                page_end=82,
+                text='Attackers can use the disclosed Vincent Valentine slug.',
+                score=0.8,
+            ),
+        ],
+        chat_model=chat,
+    )
+
+    assert answer.answer_text == "Vincent Valentine appears in a disclosed API user listing."
+    assert answer.citations == ["apis.pdf#page=82"]

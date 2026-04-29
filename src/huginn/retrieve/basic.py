@@ -51,26 +51,55 @@ def retrieve_top_chunks(
 ) -> list[RetrievedChunk]:
     question_vector: list[float] | dict[str, float]
     if embedder is None:
-        question_vector = lexical_features(question)
-    else:
-        question_vector = embedder.embed_text(question, kind="query")
+        return _retrieve_lexical_chunks(
+            store,
+            question=question,
+            top_k=top_k,
+            min_lexical_score=min_lexical_score,
+        )
 
-    if isinstance(question_vector, list):
-        matches = store.query_nearest_chunks(question_vector, limit=top_k)
-        return [
-            chunk.model_copy(update={"score": -distance})
-            for chunk, distance in matches
-            if distance <= max_dense_distance
-        ]
+    question_vector = embedder.embed_text(question, kind="query")
+    if isinstance(question_vector, dict):
+        return _retrieve_lexical_chunks(
+            store,
+            question=question,
+            top_k=top_k,
+            min_lexical_score=min_lexical_score,
+        )
 
+    matches = store.query_nearest_chunks(question_vector, limit=top_k)
+    dense_chunks = [
+        chunk.model_copy(update={"score": -distance})
+        for chunk, distance in matches
+        if distance <= max_dense_distance
+    ]
+    if dense_chunks:
+        return dense_chunks
+    return _retrieve_lexical_chunks(
+        store,
+        question=question,
+        top_k=top_k,
+        min_lexical_score=min_lexical_score,
+    )
+
+
+def _retrieve_lexical_chunks(
+    store: SQLiteStore,
+    *,
+    question: str,
+    top_k: int,
+    min_lexical_score: float,
+) -> list[RetrievedChunk]:
     scored: list[RetrievedChunk] = []
-
-    for chunk, vector in store.load_chunks():
-        score = cosine_similarity(question_vector, vector)
-        if score < min_lexical_score:
+    query_features = lexical_features(question)
+    query_tokens = set(query_features)
+    for chunk, _vector in store.load_chunks():
+        chunk_features = lexical_features(chunk.text)
+        score = cosine_similarity(query_features, chunk_features)
+        token_coverage = _token_coverage(query_tokens, chunk_features)
+        if score < min_lexical_score and token_coverage < 1.0:
             continue
-        scored.append(chunk.model_copy(update={"score": score}))
-
+        scored.append(chunk.model_copy(update={"score": max(score, token_coverage)}))
     scored.sort(
         key=lambda chunk: (
             -chunk.score,
@@ -80,6 +109,13 @@ def retrieve_top_chunks(
         )
     )
     return scored[:top_k]
+
+
+def _token_coverage(query_tokens: set[str], chunk_features: dict[str, float]) -> float:
+    if not query_tokens:
+        return 0.0
+    matched = sum(1 for token in query_tokens if token in chunk_features)
+    return matched / len(query_tokens)
 
 
 def cosine_similarity(

@@ -9,7 +9,7 @@ Huginn is a **local-first, model-agnostic document RAG system**. It indexes a fo
 The system is designed in two phases:
 
 - **Phase 1 (complete)** — basic retrieve-then-read: discover, extract, chunk, embed, retrieve top-k, answer with citations.
-- **Phase 2 (not yet implemented)** — query rewriting, reranking, answer validation, and deeper eval automation/coverage work. Earlier no-op stubs for these were removed during a cleanup pass; the modules will be added when each feature is built. See §16.
+- **Phase 2 (partially implemented)** — reranking is now available behind `features.rerank`; query rewriting, answer validation, and deeper eval automation/coverage work remain open. See §16.
 
 ---
 
@@ -33,10 +33,11 @@ The system is designed in two phases:
 1. User asks a natural-language question via CLI.
 2. Huginn embeds the question.
 3. Retrieves top-k chunks by cosine similarity against stored vectors.
-4. Generates an answer using the retrieved context:
+4. Optionally reranks the retrieved candidates when `features.rerank` is enabled, using lexical overlap against the user question and then truncating back to `top_k`.
+5. Generates an answer using the retrieved context:
    - with a chat model, it loads `config/prompts/answer.txt` and passes all retrieved chunk text as context;
    - without a chat model, it falls back to the top retrieved chunk verbatim.
-5. Returns the answer text, citations (file + page range), and an evidence note.
+6. Returns the answer text, citations (file + page range), and an evidence note.
 
 If no sufficiently relevant chunks are found, returns a safe no-answer response instead of fabricating one.
 
@@ -223,11 +224,11 @@ indexing:
 features:
   ocr_fallback: true
   query_rewrite: false      # Phase 2 flag — no implementation yet
-  rerank: false             # Phase 2 flag — no implementation yet
+  rerank: false             # Enables lexical reranking over a widened retrieval pool
   answer_validation: false  # Phase 2 flag — no implementation yet
 ```
 
-The Phase 2 flags exist in the schema so config files don't need editing later. The flags are currently inert — earlier no-op stub modules were removed during a cleanup pass to avoid the impression of partial behaviour.
+The Phase 2 flags exist in the schema so config files don't need editing later. `features.rerank` is live; `features.query_rewrite` and `features.answer_validation` remain placeholders for future work.
 
 All config is validated at load time by Pydantic (`extra="forbid"` on all models). Invalid keys, missing fields, non-local endpoints under `local_only: true`, or other constraint violations raise immediately.
 
@@ -560,7 +561,7 @@ huginn/
 
 ## 16. Phase 2 Plan
 
-Phase 2 is **not yet implemented**. Config flags, prompt placeholders in `config/prompts/`, and the PLAN sections are in place to capture intent. Earlier no-op stub modules (`retrieve/rewrite.py`, `retrieve/rerank.py`, `answer/validate.py`) were removed during a cleanup pass — they accepted an `enabled` flag, ignored it, and returned input unchanged. The module paths below are targets for future implementations, not files that currently exist.
+Phase 2 is **partially implemented**. `retrieve/rerank.py` and a rerank node in the query graph are now live behind `features.rerank`. Query rewriting and answer validation are still future work; the module paths below are targets for the next implementations.
 
 Recommended implementation order:
 
@@ -568,9 +569,9 @@ Recommended implementation order:
    - Rewrite ambiguous questions into better retrieval queries before embedding.
    - Add a `rewrite` node between entry and `retrieve` in the query graph.
 
-2. **Reranking** — new file `retrieve/rerank.py`, gated by `features.rerank`.
-   - Re-score initial top-k results using a cross-encoder or LLM-based reranker.
-   - Add a `rerank` node between `retrieve` and `answer` in the query graph.
+2. **Reranking** — implemented in `retrieve/rerank.py`, gated by `features.rerank`.
+   - Current behavior: retrieve a wider candidate pool, rerank locally by lexical overlap with the question, then truncate back to `top_k`.
+   - Future enhancement path: replace or augment the lexical reranker with a cross-encoder or LLM-based reranker if evals justify the added complexity.
 
 3. **Answer validation** — new file `answer/validate.py`, gated by `features.answer_validation`.
    - Post-check whether the generated answer is grounded in cited chunks.

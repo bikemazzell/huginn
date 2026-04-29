@@ -16,11 +16,12 @@ Implemented:
 - preflight that exercises live endpoint, model, embedding, and chat calls
 - batched embedding with retry/split fallback so ingest can recover from embedding-server 500s caused by batch shape or oversized chunk inputs
 - weak-evidence refusal via configurable lexical and dense retrieval thresholds
+- reranking behind `features.rerank`, using a widened retrieval pool and lexical overlap to reorder candidates before answer generation
 - eval metrics covering retrieval hit rate, `precision@k`, `recall@k`, MRR, citation correctness, groundedness, answer-trait match, and no-answer correctness
 - eval runner support for baseline-vs-variant comparison output across multiple configs
 - runtime/setup notes and a launcher script for the two-endpoint `llama.cpp` flow
 
-Deviation from the original plan: Phase 2 modules (`retrieve/rewrite.py`, `retrieve/rerank.py`, `answer/validate.py`) were initially scaffolded as no-op stubs and have since been removed. They added indirection without behaviour. Phase 2 is greenfield work now — implementations land when the feature is actually built.
+Deviation from the original plan: the original no-op Phase 2 stubs were removed when they provided no behavior. Reranking has since been reintroduced as a real implementation; query rewriting and answer validation remain future work.
 
 Checklists below are the source of truth for what is complete versus open.
 
@@ -39,11 +40,10 @@ This follow-up block is complete:
 
 Once Phase 1.1 is complete, the recommended next order is:
 
-1. reranking
-2. query rewriting
-3. answer validation
-4. eval CI gating and broader dataset coverage
-5. preflight hardening for real PDF/OCR dependency checks
+1. query rewriting
+2. answer validation
+3. eval CI gating and broader dataset coverage
+4. preflight hardening for real PDF/OCR dependency checks
 
 ## Goal
 
@@ -790,7 +790,7 @@ Current note:
 - [x] Phase 1 stays basic while Phase 2 advanced patterns are explicitly captured
 
 Open implementation gaps that still matter despite the green checklist:
-- Phase 2 behaviour is not yet started. Earlier no-op stubs were removed in a cleanup pass; new modules will be added when each Phase 2 feature is implemented.
+- query rewriting and answer validation are not yet implemented.
 - `scripts/preflight.py` still hardcodes PDF/OCR dependency success instead of checking real dependencies.
 
 ---

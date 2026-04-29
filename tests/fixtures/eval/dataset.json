@@ -1,0 +1,20 @@
+[
+  {
+    "question": "What is the Project Atlas budget?",
+    "expected_citations": [
+      "atlas.pdf#page=1"
+    ],
+    "expected_substrings": [
+      "1200 dollars"
+    ],
+    "expect_no_answer": false
+  },
+  {
+    "question": "What is the employee vacation policy?",
+    "expected_citations": [],
+    "expected_substrings": [
+      "I could not find grounded evidence"
+    ],
+    "expect_no_answer": true
+  }
+]

@@ -1,0 +1,1 @@
+Rewrite the user question into a better retrieval query while preserving intent.

@@ -1,0 +1,156 @@
+# Huginn
+
+Huginn is a local-first document RAG system for recursively indexing a folder of PDFs and answering grounded questions with citations.
+
+The current implementation is a Phase 1 baseline:
+
+- PDF-first ingestion
+- sidecar OCR fallback for weak/scanned PDFs
+- chunking and local persistence in SQLite
+- embedding-backed retrieval
+- grounded answer generation with citations
+- local eval and preflight scripts
+- OpenAI-compatible local model endpoints, tested with `llama.cpp`
+
+
+## Current Status
+
+Implemented now:
+
+- recursive folder ingest
+- PDF extraction with OCR sidecar fallback
+- LangGraph-based ingest, query, and eval flows
+- `sqlite-vec`-backed dense vector storage and nearest-neighbor retrieval
+- deterministic validation/unit/smoke/e2e/regression tests
+- live local runtime with separate chat and embedding endpoints
+
+Still planned for later:
+
+- query rewriting
+- reranking
+- answer validation
+- richer eval comparisons
+- additional file types
+
+## Project Layout
+
+```text
+config/                  Runtime config and prompt files
+docs/                    PLAN.md, spec.md, and local setup notes
+scripts/                 Preflight and eval helpers
+src/huginn/              Main application code
+tests/                   Validation, unit, smoke, e2e, regression, fixtures
+models/                  Local model files
+data/                    Local SQLite databases
+```
+
+## Local Model Setup
+
+The default runtime assumes two local `llama.cpp` servers:
+
+- chat model on `127.0.0.1:1234`
+- embedding model on `127.0.0.1:1235`
+
+Current default models in [config/runtime.yaml](config/runtime.yaml):
+
+- chat: `Qwen3.5-9B-Q4_K_M.gguf`
+- embeddings: `nomic-embed-text-v2-moe`
+
+There is a more detailed setup note in [docs/local-llamacpp-setup.md](docs/local-llamacpp-setup.md).
+
+## Installation
+
+If your environment already has the dependencies you want, install Huginn editable without forcing dependency resolution:
+
+```bash
+pip install -e . --no-deps
+```
+
+If you want `pip` to install Huginn's declared dependencies as well:
+
+```bash
+pip install -e .
+```
+
+## Main Commands
+
+Rebuild the local index from the fixture corpus:
+
+```bash
+python -m huginn.cli --config config/runtime.yaml --db-path data/huginn.db ingest --reindex tests/fixtures/corpus
+```
+
+Ask a question:
+
+```bash
+python -m huginn.cli --config config/runtime.yaml --db-path data/huginn.db ask "What is the launch date?"
+```
+
+Inspect the current database counts:
+
+```bash
+python -m huginn.cli --config config/runtime.yaml --db-path data/huginn.db status
+```
+
+Run preflight checks:
+
+```bash
+python scripts/preflight.py
+```
+
+Run the local eval set:
+
+```bash
+python scripts/run_eval.py
+```
+
+## Runtime Notes
+
+- Huginn is model-agnostic at the config level as long as the endpoints are OpenAI-compatible.
+- For Nomic embeddings, Huginn automatically adds:
+  - `search_query: ` for queries
+  - `search_document: ` for indexed chunks
+- If you change embedding models or embedding endpoints, run `ingest --reindex` to rebuild the vector index.
+
+## Testing
+
+Run the full local suite:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q
+```
+
+The suite includes:
+
+- validation tests
+- unit tests
+- smoke tests
+- e2e tests
+- regression tests
+
+## Storage
+
+Huginn stores:
+
+- source file metadata
+- extracted documents and pages
+- chunks and citations
+- dense vectors in `sqlite-vec`
+
+The store lives in [src/huginn/store/sqlite.py](src/huginn/store/sqlite.py). Schema is in [migrations/001_init.sql](src/huginn/store/migrations/001_init.sql) and all queries are kept as `.sql` files under [store/queries/](src/huginn/store/queries/).
+
+## Eval
+
+The local eval runner currently reports:
+
+- retrieval hit rate
+- citation correctness
+- groundedness
+- answer trait match
+- no-answer correctness
+
+The default dataset lives in [tests/fixtures/eval/dataset.json](tests/fixtures/eval/dataset.json).
+
+## Planning
+
+Status and next priorities are tracked in [docs/PLAN.md](docs/PLAN.md). The living system spec is in [docs/spec.md](docs/spec.md).

@@ -6,6 +6,7 @@ from langgraph.graph import END, StateGraph
 from huginn.answer.generate import ChatModel, generate_answer
 from huginn.config import RuntimeConfig
 from huginn.retrieve.basic import Embedder, retrieve_top_chunks
+from huginn.retrieve.rewrite import rewrite_query
 from huginn.retrieve.rerank import rerank_chunks
 from huginn.schemas import QueryAnswer, RetrievedChunk
 from huginn.store.sqlite import SQLiteStore
@@ -15,6 +16,7 @@ class QueryState(TypedDict):
     config: RuntimeConfig
     db_path: str
     question: str
+    retrieval_question: str
     embedder: Embedder | None
     chat_model: ChatModel | None
     chunks: list[RetrievedChunk]
@@ -30,10 +32,12 @@ def run_query(
     chat_model: ChatModel | None = None,
 ) -> QueryAnswer:
     graph = StateGraph(QueryState)
+    graph.add_node("rewrite", _rewrite)
     graph.add_node("retrieve", _retrieve)
     graph.add_node("rerank", _rerank)
     graph.add_node("answer", _answer)
-    graph.set_entry_point("retrieve")
+    graph.set_entry_point("rewrite")
+    graph.add_edge("rewrite", "retrieve")
     graph.add_edge("retrieve", "rerank")
     graph.add_edge("rerank", "answer")
     graph.add_edge("answer", END)
@@ -43,6 +47,7 @@ def run_query(
             "config": config,
             "db_path": str(db_path),
             "question": question,
+            "retrieval_question": question,
             "embedder": embedder,
             "chat_model": chat_model,
             "chunks": [],
@@ -52,12 +57,22 @@ def run_query(
     return result["answer"]
 
 
+def _rewrite(state: QueryState) -> QueryState:
+    if not state["config"].features.query_rewrite:
+        return {**state, "retrieval_question": state["question"]}
+    rewritten = rewrite_query(
+        state["question"],
+        chat_model=state["chat_model"],
+    )
+    return {**state, "retrieval_question": rewritten}
+
+
 def _retrieve(state: QueryState) -> QueryState:
     store = SQLiteStore(state["db_path"])
     try:
         chunks = retrieve_top_chunks(
             store=store,
-            question=state["question"],
+            question=state["retrieval_question"],
             top_k=_retrieve_limit(state["config"]),
             embedder=state["embedder"],
             min_lexical_score=state["config"].indexing.min_lexical_score,

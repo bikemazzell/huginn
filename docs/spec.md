@@ -9,7 +9,7 @@ Huginn is a **local-first, model-agnostic document RAG system**. It indexes a fo
 The system is designed in two phases:
 
 - **Phase 1 (complete)** — basic retrieve-then-read: discover, extract, chunk, embed, retrieve top-k, answer with citations.
-- **Phase 2 (partially implemented)** — reranking is now available behind `features.rerank`; query rewriting, answer validation, and deeper eval automation/coverage work remain open. See §16.
+- **Phase 2 (partially implemented)** — query rewriting and reranking are now available behind feature flags; answer validation and deeper eval automation/coverage work remain open. See §16.
 
 ---
 
@@ -32,12 +32,13 @@ The system is designed in two phases:
 
 1. User asks a natural-language question via CLI.
 2. Huginn embeds the question.
-3. Retrieves top-k chunks by cosine similarity against stored vectors.
-4. Optionally reranks the retrieved candidates when `features.rerank` is enabled, using lexical overlap against the user question and then truncating back to `top_k`.
-5. Generates an answer using the retrieved context:
+3. Optionally rewrites the retrieval query when `features.query_rewrite` is enabled, while preserving the original user question for answer generation.
+4. Retrieves top-k chunks by cosine similarity against stored vectors.
+5. Optionally reranks the retrieved candidates when `features.rerank` is enabled, using lexical overlap against the user question and then truncating back to `top_k`.
+6. Generates an answer using the retrieved context:
    - with a chat model, it loads `config/prompts/answer.txt` and passes all retrieved chunk text as context;
    - without a chat model, it falls back to the top retrieved chunk verbatim.
-6. Returns the answer text, citations (file + page range), and an evidence note.
+7. Returns the answer text, citations (file + page range), and an evidence note.
 
 If no sufficiently relevant chunks are found, returns a safe no-answer response instead of fabricating one.
 
@@ -223,12 +224,12 @@ indexing:
 
 features:
   ocr_fallback: true
-  query_rewrite: false      # Phase 2 flag — no implementation yet
+  query_rewrite: false      # Rewrites only the retrieval query; original question is preserved for answering
   rerank: false             # Enables lexical reranking over a widened retrieval pool
   answer_validation: false  # Phase 2 flag — no implementation yet
 ```
 
-The Phase 2 flags exist in the schema so config files don't need editing later. `features.rerank` is live; `features.query_rewrite` and `features.answer_validation` remain placeholders for future work.
+The Phase 2 flags exist in the schema so config files don't need editing later. `features.query_rewrite` and `features.rerank` are live; `features.answer_validation` remains a placeholder for future work.
 
 All config is validated at load time by Pydantic (`extra="forbid"` on all models). Invalid keys, missing fields, non-local endpoints under `local_only: true`, or other constraint violations raise immediately.
 
@@ -561,13 +562,13 @@ huginn/
 
 ## 16. Phase 2 Plan
 
-Phase 2 is **partially implemented**. `retrieve/rerank.py` and a rerank node in the query graph are now live behind `features.rerank`. Query rewriting and answer validation are still future work; the module paths below are targets for the next implementations.
+Phase 2 is **partially implemented**. `retrieve/rewrite.py` and `retrieve/rerank.py` are live behind feature flags. Answer validation is still future work; the module paths below are targets for the next implementations.
 
 Recommended implementation order:
 
-1. **Query rewriting** — new file `retrieve/rewrite.py`, gated by `features.query_rewrite`.
-   - Rewrite ambiguous questions into better retrieval queries before embedding.
-   - Add a `rewrite` node between entry and `retrieve` in the query graph.
+1. **Query rewriting** — implemented in `retrieve/rewrite.py`, gated by `features.query_rewrite`.
+   - Current behavior: uses `config/prompts/rewrite_query.txt` and the chat model to produce a bounded rewrite used only for retrieval.
+   - The original user question is preserved unchanged for answer generation and evidence notes.
 
 2. **Reranking** — implemented in `retrieve/rerank.py`, gated by `features.rerank`.
    - Current behavior: retrieve a wider candidate pool, rerank locally by lexical overlap with the question, then truncate back to `top_k`.

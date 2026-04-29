@@ -57,6 +57,8 @@ def _retrieve(state: QueryState) -> QueryState:
             question=state["question"],
             top_k=state["config"].indexing.top_k,
             embedder=state["embedder"],
+            min_lexical_score=state["config"].indexing.min_lexical_score,
+            max_dense_distance=state["config"].indexing.max_dense_distance,
         )
     finally:
         store.close()

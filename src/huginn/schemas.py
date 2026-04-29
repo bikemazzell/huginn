@@ -25,6 +25,8 @@ class IndexingConfig(BaseModel):
     chunk_size: int = Field(gt=0)
     chunk_overlap: int = Field(ge=0)
     top_k: int = Field(gt=0)
+    min_lexical_score: float = Field(default=0.2, ge=0.0, le=1.0)
+    max_dense_distance: float = Field(default=0.7, ge=0.0)
 
     @model_validator(mode="after")
     def validate_overlap(self) -> "IndexingConfig":

@@ -41,6 +41,8 @@ def test_load_runtime_config_parses_valid_yaml(tmp_path: Path) -> None:
     assert config.models.chat.model == "qwen3:8b"
     assert config.models.embedding.model == "bge-m3"
     assert config.indexing.chunk_size == 800
+    assert config.indexing.min_lexical_score == 0.2
+    assert config.indexing.max_dense_distance == 0.7
     assert config.features.ocr_fallback is True
 
 

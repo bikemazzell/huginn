@@ -9,7 +9,7 @@ Implemented:
 - PDF extraction with sidecar OCR fallback
 - chunking, persistence, retrieval, and grounded answers with citations
 - CLI commands for `ingest`, `ask`, and `status`
-- validation/unit/smoke/e2e/regression test tiers (45 tests, all green)
+- validation/unit/smoke/e2e/regression test tiers (51 tests, all green)
 - live OpenAI-compatible chat + embedding endpoints, tested against local `llama.cpp`
 - fixture corpus, eval dataset, and local eval runner
 - `sqlite-vec` for dense vector storage and KNN retrieval
@@ -35,12 +35,13 @@ This follow-up block is complete:
 
 ### Phase 2 Ready Queue
 
-Once Phase 1.1 is complete, the recommended Phase 2 order is:
+Once Phase 1.1 is complete, the recommended next order is:
 
-1. query rewriting
+1. threshold-based refusal for weak evidence
 2. reranking
-3. answer validation
-4. richer eval comparisons across baseline versus Phase 2 variants
+3. richer eval comparisons across baseline versus Phase 2 variants
+4. query rewriting
+5. answer validation
 
 ## Goal
 
@@ -713,7 +714,7 @@ Each answer should include:
 
 1. `[x]` Python version (>= 3.12)
 2. `[x]` `uv` availability
-3. `[~]` configured endpoint reachability — the `_check_endpoint` helper in `scripts/preflight.py` references `urllib.request` without importing it, so the urllib branch raises `NameError` and falls through to the curl fallback. Either fix the import or delete the duplicated helper and reuse `huginn.preflight.fetch_model_ids`.
+3. `[x]` configured endpoint reachability
 4. `[x]` model availability from the configured endpoint
 5. `[x]` embedding call success
 6. `[x]` chat call success
@@ -789,7 +790,8 @@ Current note:
 
 Open implementation gaps that still matter despite the green checklist:
 - Phase 2 behaviour is not yet started. Earlier no-op stubs were removed in a cleanup pass; new modules will be added when each Phase 2 feature is implemented.
-- `scripts/preflight.py` has the bug noted in §15 — endpoint reachability silently falls through to curl.
+- weak-evidence refusal is still too permissive: Phase 1 refuses only on zero retrieval, not on low-quality retrieval.
+- `scripts/preflight.py` still hardcodes PDF/OCR dependency success instead of checking real dependencies.
 
 ---
 
@@ -816,7 +818,7 @@ Build:
 
 Status:
 - the Phase 1 baseline is stable enough to use as the comparison point for Phase 2 work
-- remaining debt: the preflight script bug in §15, and the hardcoded PDF/OCR dependency checks
+- remaining debt: weak-evidence refusal, and the hardcoded PDF/OCR dependency checks
 
 ### Phase 2
 
@@ -851,3 +853,28 @@ These assumptions informed this plan revision:
 - `sqlite-vec` is appropriate for a lightweight local vector index, but should be version-pinned because it is still pre-v1.
 
 These facts were checked during plan revision on 2026-04-28.
+
+### Vector store choice: stay on sqlite-vec (2026-04-29)
+
+LanceDB and Chroma were considered as alternatives. Decision: stay on `sqlite-vec` for the local-first baseline.
+
+Rationale:
+- One file, one transaction. Vectors live in the same SQLite database as `source_files`, `documents`, `pages`, `chunks`, and citations. Ingest writes are atomic across relational and vector data; a separate vector store would require a second datastore to keep in sync.
+- No extra process or service. Chroma is commonly run as a separate server; LanceDB is embedded but adds a second on-disk format and dependency surface.
+- Matches the local-first, single-user shape of the project. There is no multi-tenant or distributed-query requirement that would justify the migration cost.
+
+Tradeoff to revisit:
+- `sqlite-vec` KNN is brute-force; latency grows linearly with chunk count. If the corpus crosses roughly 500k chunks or `ask` latency becomes the bottleneck, evaluate LanceDB (columnar, ANN indexes, richer filter pushdown) before committing to a rewrite.
+- Hybrid retrieval (FTS5 + dense) and metadata pre-filtering, both listed in §10, are achievable inside SQLite today and are not a reason to migrate.
+
+### Embedding model: evaluate BGE-large vs Nomic (2026-04-29)
+
+Current: `nomic-embed-text-v1.5` via `llama.cpp`, wrapped by `NomicPrefixEmbedder` to prepend `search_query:` / `search_document:`.
+
+Alternative to evaluate: `BAAI/bge-large-en-v1.5` (1024-dim, no prefix scheme). BGE-large generally outperforms Nomic on MTEB retrieval benchmarks; the gap on Huginn's own eval set is unknown until measured.
+
+How to evaluate without committing:
+- Stand up a second `llama.cpp` embedding server on a different port serving BGE-large, point a copy of `runtime.yaml` at it, run `ingest --reindex` against a separate `data/huginn-bge.db`, then run `scripts/run_eval.py` against both DBs and compare retrieval hit rate, citation correctness, and groundedness.
+- The Nomic prefix wrapper is gated by model name in `huginn.llm.factory.build_runtime_clients`, so swapping models flips the wrapper off automatically — no code change needed for the comparison.
+
+Decision deferred until eval numbers exist. Worth noting that Nomic's 768-dim vs BGE-large's 1024-dim affects sqlite-vec storage size and KNN cost; if the quality delta is small, Nomic stays on cost grounds.

@@ -46,6 +46,8 @@ def retrieve_top_chunks(
     question: str,
     top_k: int,
     embedder: Embedder | None = None,
+    min_lexical_score: float = 0.2,
+    max_dense_distance: float = 0.7,
 ) -> list[RetrievedChunk]:
     question_vector: list[float] | dict[str, float]
     if embedder is None:
@@ -58,13 +60,14 @@ def retrieve_top_chunks(
         return [
             chunk.model_copy(update={"score": -distance})
             for chunk, distance in matches
+            if distance <= max_dense_distance
         ]
 
     scored: list[RetrievedChunk] = []
 
     for chunk, vector in store.load_chunks():
         score = cosine_similarity(question_vector, vector)
-        if score <= 0:
+        if score < min_lexical_score:
             continue
         scored.append(chunk.model_copy(update={"score": score}))
 

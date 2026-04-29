@@ -175,7 +175,7 @@ vec_chunks (                              -- sqlite-vec virtual table (created o
 |---|---|
 | `RuntimeConfig` | Root config: `root_path`, `local_only`, `models`, `indexing`, `features` |
 | `ModelsConfig` | Holds `chat` and `embedding` `ModelEndpointConfig` |
-| `IndexingConfig` | `chunk_size`, `chunk_overlap`, `top_k` (validated: overlap < size) |
+| `IndexingConfig` | `chunk_size`, `chunk_overlap`, `top_k`, `min_lexical_score`, `max_dense_distance` (validated: overlap < size) |
 | `FeaturesConfig` | `ocr_fallback`, `query_rewrite`, `rerank`, `answer_validation` |
 | `ExtractedDocument` | Output of extraction: `source_path`, `title`, `pages` |
 | `ExtractedPage` | Single page: `page_number`, `text` |
@@ -216,6 +216,8 @@ indexing:
   chunk_size: 128
   chunk_overlap: 24
   top_k: 4
+  min_lexical_score: 0.2
+  max_dense_distance: 0.7
 
 features:
   ocr_fallback: true
@@ -227,6 +229,8 @@ features:
 The Phase 2 flags exist in the schema so config files don't need editing later. The flags are currently inert — earlier no-op stub modules were removed during a cleanup pass to avoid the impression of partial behaviour.
 
 All config is validated at load time by Pydantic (`extra="forbid"` on all models). Invalid keys, missing fields, non-local endpoints under `local_only: true`, or other constraint violations raise immediately.
+
+`indexing.min_lexical_score` and `indexing.max_dense_distance` define the weak-evidence refusal floor for sparse retrieval and the distance ceiling for dense retrieval.
 
 ---
 
@@ -303,13 +307,14 @@ When a real `Embedder` is provided:
 When no embedder is provided:
 1. Compute sparse bag-of-words vectors for the question and all stored chunks (stopword-filtered).
 2. Score via cosine similarity.
-3. Filter out zero-similarity matches, sort by score descending, return top-k.
+3. Filter out matches below `indexing.min_lexical_score`, sort by score descending, return top-k.
 
 ### 9.3 Scoring
 
 - Dense: score = negative distance (higher = better match).
 - Lexical: score = cosine similarity (0 to 1).
 - Secondary sort: fewer pages, shorter text, lower chunk_id.
+- Dense retrieval also rejects matches whose raw distance exceeds `indexing.max_dense_distance`.
 
 ---
 
@@ -328,7 +333,7 @@ Implemented in `answer/generate.py`.
 
 ### 10.1 No-Answer Policy
 
-When retrieval returns no results, the system returns:
+When retrieval returns no results, or only weak results that fail the configured retrieval thresholds, the system returns:
 
 ```json
 {

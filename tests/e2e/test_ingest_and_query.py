@@ -6,7 +6,13 @@ from huginn.graph.query_graph import run_query
 from tests.helpers import write_pdf
 
 
-def build_runtime_config(tmp_path: Path, corpus: Path):
+def build_runtime_config(
+    tmp_path: Path,
+    corpus: Path,
+    *,
+    min_lexical_score: float = 0.2,
+    max_dense_distance: float = 0.7,
+):
     config_path = tmp_path / "runtime.yaml"
     config_path.write_text(
         "\n".join(
@@ -26,6 +32,8 @@ def build_runtime_config(tmp_path: Path, corpus: Path):
                 "  chunk_size: 8",
                 "  chunk_overlap: 2",
                 "  top_k: 4",
+                f"  min_lexical_score: {min_lexical_score}",
+                f"  max_dense_distance: {max_dense_distance}",
                 "features:",
                 "  ocr_fallback: true",
                 "  query_rewrite: false",
@@ -81,6 +89,24 @@ def test_e2e_negative_query_returns_safe_no_answer(tmp_path: Path) -> None:
         config,
         db_path=tmp_path / "huginn.db",
         question="What is the employee vacation policy?",
+    )
+
+    assert answer.answer_text == "I could not find grounded evidence for that question."
+    assert answer.citations == []
+    assert answer.evidence_note == "No sufficiently relevant chunks were retrieved."
+
+
+def test_e2e_weak_lexical_match_returns_safe_no_answer(tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    write_pdf(corpus / "atlas.pdf", ["Atlas appendix notes and planning backlog."])
+    config = build_runtime_config(tmp_path, corpus, min_lexical_score=0.4)
+
+    run_ingest(config, db_path=tmp_path / "huginn.db")
+    answer = run_query(
+        config,
+        db_path=tmp_path / "huginn.db",
+        question="What is the Atlas employee vacation reimbursement policy?",
     )
 
     assert answer.answer_text == "I could not find grounded evidence for that question."

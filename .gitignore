@@ -68,3 +68,5 @@ tmp/
 .env
 .env.*
 !.env.example
+
+sample-input/

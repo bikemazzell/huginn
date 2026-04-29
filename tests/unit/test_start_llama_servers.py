@@ -20,6 +20,19 @@ class DummyPopen:
         self.kwargs = kwargs
 
 
+def test_parse_args_has_no_baked_in_chat_mmproj_default(monkeypatch) -> None:
+    module = _load_start_script()
+    monkeypatch.delenv("HUGINN_CHAT_MMPROJ", raising=False)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["start_llama_servers.py", "--chat-model", "/tmp/chat.gguf"],
+    )
+
+    args = module.parse_args()
+
+    assert args.chat_mmproj is None
+
+
 def test_spawn_chat_server_uses_working_qwen_flags(monkeypatch) -> None:
     module = _load_start_script()
     captured: dict[str, object] = {}

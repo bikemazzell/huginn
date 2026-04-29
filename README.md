@@ -21,6 +21,8 @@ Implemented now:
 - PDF extraction with OCR sidecar fallback
 - LangGraph-based ingest, query, and eval flows
 - `sqlite-vec`-backed dense vector storage and nearest-neighbor retrieval
+- weak-evidence refusal via configurable dense/lexical retrieval thresholds
+- eval runner with `precision@k`, `recall@k`, `MRR`, and baseline-vs-variant comparison output
 - deterministic validation/unit/smoke/e2e/regression tests
 - live local runtime with separate chat and embedding endpoints
 
@@ -59,10 +61,11 @@ To start both servers in one shot (useful for smoke and e2e runs), use the launc
 
 ```bash
 HUGINN_CHAT_MODEL=/path/to/Qwen3.5-9B-Q4_K_M.gguf \
+  HUGINN_CHAT_MMPROJ=/path/to/mmproj-F16.gguf \
   python scripts/start_llama_servers.py
 ```
 
-The script blocks until both endpoints respond on `/v1/models`, then keeps running until interrupted; Ctrl-C terminates both child servers. See `--help` for port, context, and `-ngl` overrides. The embed model defaults to the path in `models/`; override with `HUGINN_EMBED_MODEL` or `--embed-model`.
+The script blocks until both endpoints respond on `/v1/models`, then keeps running until interrupted; Ctrl-C terminates both child servers. See `--help` for port, context, and `-ngl` overrides. The chat model path and its matching `mmproj` path must be provided explicitly. The embed model defaults to the path in `models/`; override with `HUGINN_EMBED_MODEL` or `--embed-model`.
 
 There is a more detailed setup note in [docs/local-llamacpp-setup.md](docs/local-llamacpp-setup.md).
 
@@ -112,6 +115,12 @@ Run the local eval set:
 python scripts/run_eval.py
 ```
 
+Compare multiple runtime configs against a baseline:
+
+```bash
+python scripts/run_eval.py --config config/runtime.yaml --config config/variant.yaml
+```
+
 ## Runtime Notes
 
 - Huginn is model-agnostic at the config level as long as the endpoints are OpenAI-compatible.
@@ -159,6 +168,8 @@ The local eval runner currently reports:
 - groundedness
 - answer trait match
 - no-answer correctness
+
+If multiple `--config` paths are provided, the first run is treated as baseline and the output includes metric deltas for the additional runs.
 
 The default dataset lives in [tests/fixtures/eval/dataset.json](tests/fixtures/eval/dataset.json).
 

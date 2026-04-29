@@ -14,8 +14,12 @@ Example `Qwen3.5-9B` server:
 ```bash
 llama-server \
   -m /path/to/Qwen3.5-9B-Q4_K_M.gguf \
+  --mmproj /path/to/mmproj-F16.gguf \
   --host 127.0.0.1 \
   --port 1234 \
+  --jinja \
+  --reasoning off \
+  --reasoning-budget 0 \
   -ngl 99 \
   -c 8192
 ```

@@ -9,7 +9,7 @@ Huginn is a **local-first, model-agnostic document RAG system**. It indexes a fo
 The system is designed in two phases:
 
 - **Phase 1 (complete)** — basic retrieve-then-read: discover, extract, chunk, embed, retrieve top-k, answer with citations.
-- **Phase 2 (not yet implemented)** — query rewriting, reranking, answer validation, richer eval comparisons. Earlier no-op stubs for these were removed during a cleanup pass; the modules will be added when each feature is built. See §16.
+- **Phase 2 (not yet implemented)** — query rewriting, reranking, answer validation, and deeper eval automation/coverage work. Earlier no-op stubs for these were removed during a cleanup pass; the modules will be added when each feature is built. See §16.
 
 ---
 
@@ -110,6 +110,7 @@ src/huginn/
 
 - **Model-agnostic**: all model interaction goes through OpenAI-compatible HTTP endpoints. No provider SDKs; uses `urllib` directly.
 - **Local-first**: `local_only: true` now enforces localhost-only model endpoints at config validation time. The default setup uses two local `llama.cpp` servers (chat on `:1234`, embeddings on `:1235`).
+- **Explicit local runtime wiring**: the bundled `scripts/start_llama_servers.py` launcher starts the two-endpoint `llama.cpp` setup, but requires the chat GGUF path and matching `mmproj` path to be supplied explicitly rather than assuming machine-specific filesystem locations.
 - **Extractor registry**: file-type routing in `extract/registry.py` keeps PDF-specific code isolated. Adding a new file type means adding an extractor class and extending the registry.
 - **Dual retrieval**: dense vector search via `sqlite-vec` when embeddings are available; sparse lexical (bag-of-words + cosine) as a zero-dependency fallback.
 - **Feature flags**: `features.*` in config gate Phase 2 capabilities. Phase 1 features (`ocr_fallback`) are also togglable.
@@ -241,7 +242,7 @@ All config is validated at load time by Pydantic (`extra="forbid"` on all models
 Built in `llm/factory.py` via `build_runtime_clients()`:
 
 - **`OpenAICompatibleEmbedder`** — POSTs to `/embeddings`. Supports single and batch embedding.
-- **`OpenAICompatibleChatModel`** — POSTs to `/chat/completions`. Returns assistant message content.
+- **`OpenAICompatibleChatModel`** — POSTs to `/chat/completions`. Returns assistant message content and explicitly requests reasoning-off behavior for local Qwen-style runtimes.
 - **`LocalLexicalEmbedder`** — in-process fallback that produces sparse bag-of-words vectors (no model call).
 - **`NomicPrefixEmbedder`** — decorator that prepends `search_query:` / `search_document:` for Nomic models.
 
@@ -249,6 +250,7 @@ Built in `llm/factory.py` via `build_runtime_clients()`:
 
 - Models whose name starts with `nomic-embed-text-` automatically get task-specific prefixes prepended.
 - If the model name is `"local-lexical"`, the system uses a zero-dependency bag-of-words embedder instead of making HTTP calls.
+- Batched embedding requests are sent in bounded slices and retried by splitting on HTTP 500 failures; singleton requests that still overflow the embedding server context are retried with shorter prefixes so one oversized chunk does not fail the entire ingest.
 - Dense embeddings (lists of floats) are stored in both `chunk_embeddings.vector_json` (for fallback/sparse retrieval) and `vec_chunks` (for fast ANN via sqlite-vec).
 - Sparse embeddings (dicts of token→count) are stored only in `chunk_embeddings.vector_json`.
 
@@ -391,7 +393,7 @@ If multiple `--config` paths are provided, it treats the first run as baseline a
 | Python >= 3.12 | `sys.version_info` |
 | `uv` available | `shutil.which("uv")` |
 | Config loads and validates | `load_runtime_config()` |
-| Endpoints reachable | HTTP GET `/models` |
+| Endpoints reachable | HTTP GET `/v1/models` |
 | Chat model available in endpoint | Model list fetched and matched |
 | Embedding model available in endpoint | Model list fetched and matched |
 | Embedding call succeeds | `embedder.embed_text("preflight ping", kind="query")` |
@@ -495,6 +497,7 @@ huginn/
 ├── scripts/
 │   ├── preflight.py
 │   ├── run_eval.py
+│   ├── start_llama_servers.py
 │   ├── build_eval_set.py
 │   └── generate_fixtures.py
 ├── src/huginn/
@@ -573,9 +576,10 @@ Recommended implementation order:
    - Post-check whether the generated answer is grounded in cited chunks.
    - Add a `validate` node after `answer` in the query graph.
 
-4. **Richer eval comparisons**
+4. **Eval automation and coverage expansion**
    - Run eval with each Phase 2 feature toggled on/off independently.
-   - Compare baseline vs. Phase 2 metrics.
+   - Gate retrieval/prompt changes on baseline-vs-variant metric comparisons.
+   - Broaden the eval dataset beyond the current hand-curated starter set.
 
 Each Phase 2 feature must be independently togglable via config. The Phase 1 baseline must remain fully functional when all Phase 2 flags are `false`.
 

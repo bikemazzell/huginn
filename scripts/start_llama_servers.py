@@ -6,8 +6,8 @@ Blocks until both endpoints respond on /v1/models, then keeps running until
 SIGINT/SIGTERM, at which point both child servers are terminated.
 
 Usage:
-    scripts/start_llama_servers.py --chat-model /path/to/qwen.gguf
-    HUGINN_CHAT_MODEL=/path/to/qwen.gguf scripts/start_llama_servers.py
+    scripts/start_llama_servers.py --chat-model /path/to/qwen.gguf --chat-mmproj /path/to/mmproj.gguf
+    HUGINN_CHAT_MODEL=/path/to/qwen.gguf HUGINN_CHAT_MMPROJ=/path/to/mmproj.gguf scripts/start_llama_servers.py
 
 Override the binary with $LLAMA_SERVER_BIN (default: llama-server on PATH).
 """
@@ -28,10 +28,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_EMBED_MODEL = (
     REPO_ROOT / "models" / "nomic-embed-text-v2-moe" / "nomic-embed-text-v2-moe.Q4_K_M.gguf"
 )
-DEFAULT_CHAT_MMPROJ = (
-    Path("/home/v/Documents/Dev/PlantLab/experiments/autoresearch/local_vlm_eval/models/qwen3.5-9b")
-    / "mmproj-F16.gguf"
-)
 CHAT_PORT = 1234
 EMBED_PORT = 1235
 HEALTH_TIMEOUT_SEC = 120
@@ -47,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--chat-mmproj",
-        default=os.environ.get("HUGINN_CHAT_MMPROJ", str(DEFAULT_CHAT_MMPROJ)),
+        default=os.environ.get("HUGINN_CHAT_MMPROJ"),
         help="Path to chat mmproj GGUF (env: HUGINN_CHAT_MMPROJ).",
     )
     parser.add_argument(

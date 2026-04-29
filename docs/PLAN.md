@@ -9,14 +9,16 @@ Implemented:
 - PDF extraction with sidecar OCR fallback
 - chunking, persistence, retrieval, and grounded answers with citations
 - CLI commands for `ingest`, `ask`, and `status`
-- validation/unit/smoke/e2e/regression test tiers (51 tests, all green)
+- validation/unit/smoke/e2e/regression test tiers (63 tests, all green)
 - live OpenAI-compatible chat + embedding endpoints, tested against local `llama.cpp`
 - fixture corpus, eval dataset, and local eval runner
 - `sqlite-vec` for dense vector storage and KNN retrieval
 - preflight that exercises live endpoint, model, embedding, and chat calls
-- batch embedding API (`embed_texts`) so ingest issues one HTTP call per document, not one per chunk
-- eval metrics covering retrieval hit rate, citation correctness, groundedness, answer-trait match, and no-answer correctness
-- runtime/setup notes for the two-endpoint `llama.cpp` flow
+- batched embedding with retry/split fallback so ingest can recover from embedding-server 500s caused by batch shape or oversized chunk inputs
+- weak-evidence refusal via configurable lexical and dense retrieval thresholds
+- eval metrics covering retrieval hit rate, `precision@k`, `recall@k`, MRR, citation correctness, groundedness, answer-trait match, and no-answer correctness
+- eval runner support for baseline-vs-variant comparison output across multiple configs
+- runtime/setup notes and a launcher script for the two-endpoint `llama.cpp` flow
 
 Deviation from the original plan: Phase 2 modules (`retrieve/rewrite.py`, `retrieve/rerank.py`, `answer/validate.py`) were initially scaffolded as no-op stubs and have since been removed. They added indirection without behaviour. Phase 2 is greenfield work now — implementations land when the feature is actually built.
 
@@ -41,6 +43,7 @@ Once Phase 1.1 is complete, the recommended next order is:
 2. query rewriting
 3. answer validation
 4. eval CI gating and broader dataset coverage
+5. preflight hardening for real PDF/OCR dependency checks
 
 ## Goal
 
@@ -823,7 +826,7 @@ Add:
 - query rewriting
 - reranking
 - answer validation
-- richer eval comparisons
+- eval CI gating and broader dataset coverage
 
 ### Phase 2 exit criteria
 

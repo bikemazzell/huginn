@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -49,6 +50,17 @@ class RuntimeConfig(BaseModel):
     models: ModelsConfig
     indexing: IndexingConfig
     features: FeaturesConfig
+
+    @model_validator(mode="after")
+    def validate_local_only_endpoints(self) -> "RuntimeConfig":
+        if not self.local_only:
+            return self
+
+        for endpoint in (self.models.chat, self.models.embedding):
+            host = urlparse(endpoint.base_url).hostname
+            if host not in {"localhost", "127.0.0.1", "::1"}:
+                raise ValueError("local_only requires localhost model endpoints")
+        return self
 
 
 class ExtractedPage(BaseModel):

@@ -25,11 +25,51 @@ def test_generate_answer_uses_chat_model_for_grounded_response() -> None:
                 page_end=1,
                 text="Project Atlas budget is 1200 dollars.",
                 score=0.9,
+            ),
+            RetrievedChunk(
+                chunk_id=2,
+                source_path="/tmp/atlas.pdf",
+                page_start=2,
+                page_end=2,
+                text="The launch date is 2026-05-15.",
+                score=0.8,
             )
         ],
         chat_model=chat,
     )
 
     assert answer.answer_text == "The budget is 1200 dollars."
-    assert answer.citations == ["atlas.pdf#page=1"]
+    assert answer.citations == ["atlas.pdf#page=1", "atlas.pdf#page=2"]
+    assert chat.prompts[0][0] == (
+        "Answer only from the retrieved document chunks. "
+        "Cite the supporting source file and page reference."
+    )
     assert "Project Atlas budget is 1200 dollars." in chat.prompts[0][1]
+    assert "The launch date is 2026-05-15." in chat.prompts[0][1]
+
+
+def test_generate_answer_without_chat_model_preserves_top_chunk_fallback() -> None:
+    answer = generate_answer(
+        "Summarize the findings.",
+        [
+            RetrievedChunk(
+                chunk_id=1,
+                source_path="/tmp/atlas.pdf",
+                page_start=1,
+                page_end=1,
+                text="Project Atlas budget is 1200 dollars.",
+                score=0.9,
+            ),
+            RetrievedChunk(
+                chunk_id=2,
+                source_path="/tmp/atlas.pdf",
+                page_start=2,
+                page_end=2,
+                text="The launch date is 2026-05-15.",
+                score=0.8,
+            ),
+        ],
+    )
+
+    assert answer.answer_text == "Project Atlas budget is 1200 dollars."
+    assert answer.citations == ["atlas.pdf#page=1"]

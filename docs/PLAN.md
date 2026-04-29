@@ -515,7 +515,7 @@ These notes are distilled from production RAG systems on other domains and adapt
 
 - **Hybrid retrieval (dense + sparse)** catches what either method alone misses. Dense embeddings blur exact-match queries — section numbers, named entities, acronyms, dates. SQLite's built-in FTS5 module gives BM25 keyword scoring without a new dependency. Combine the two rankings via reciprocal rank fusion (`score = Σ 1/(k + rank_i)`).
 - **Retrieve wide, rerank narrow**: top-N around 20-30 from retrieval, then rerank down to top-K = 4-6 before generation. Never feed 20 chunks straight into the LLM — it costs context and dilutes attention.
-  - Note current Phase 1 gap: `indexing.top_k = 4` in config, but [`answer/generate.py`](../src/huginn/answer/generate.py) uses only `chunks[0]` to generate the answer. The other three are retrieved and never used. Closing this gap is the natural first move when adding the rerank stage.
+  - Phase 1.1 closed the earlier single-chunk prompt gap: the answer model now receives all retrieved chunks as context. Reranking still matters because retrieved context quality, ordering, and redundancy still directly affect the final answer.
 - **Pre-filter by metadata before vector scoring** when corpus segmentation matters (file type, modified-at range, language). Optional for general PDF corpora; essential for time-sensitive ones.
 
 #### Embeddings
@@ -532,7 +532,7 @@ These notes are distilled from production RAG systems on other domains and adapt
 #### Generation
 
 - The Phase 1 path uses a single chat model for the final answer. When Phase 2 query rewriting lands, it should be run through a smaller/cheaper model than the answerer (smaller local quant, or just a tighter system prompt with shorter max tokens). Heavy reasoning belongs only on the user-facing answer step.
-- Prompt structure already in place: system prompt with citation/refusal contract, user question, retrieved chunk(s) with source markers. The current system prompt is "Answer only from the supplied context and do not invent facts" — minimally adequate for Phase 1.
+- Prompt structure already in place: system prompt loaded from `config/prompts/answer.txt`, user question, and retrieved chunk(s) as context. The prompt remains intentionally simple for Phase 1.
 - **Threshold-based refusal**: Phase 1 returns the no-answer message only when retrieval returns **zero** chunks. It does not refuse when retrieval returns weakly-relevant chunks. That is the same fabricate-from-weak-evidence failure mode that the no-answer policy is meant to prevent. Phase 2 should add a configurable score threshold (or distance ceiling for dense, or cosine floor for lexical) below which the system refuses with the no-answer message rather than passing the chunk to the LLM. This is independent of reranking and is a real gap today.
 - Long-context note: frontier models in 2026 ship with 1M+ token windows, which loosens the retrieval-precision constraint for high-stakes paths. Local llama.cpp models typically run 8k-32k, so this lever applies only if remote endpoints are added later. Even with long context, retrieval still matters for cost, latency, and the audit trail behind every cited claim.
 

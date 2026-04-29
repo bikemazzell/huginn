@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 from typing import Protocol
 
@@ -6,6 +7,12 @@ from huginn.schemas import QueryAnswer, RetrievedChunk
 
 class ChatModel(Protocol):
     def complete(self, *, system_prompt: str, user_prompt: str) -> str: ...
+
+
+@lru_cache(maxsize=1)
+def _answer_system_prompt() -> str:
+    prompt_path = Path(__file__).resolve().parents[3] / "config" / "prompts" / "answer.txt"
+    return prompt_path.read_text(encoding="utf-8").strip()
 
 
 def format_citation(chunk: RetrievedChunk) -> str:
@@ -29,18 +36,20 @@ def generate_answer(
         )
 
     top_chunk = chunks[0]
+    context_text = "\n\n".join(chunk.text for chunk in chunks)
+    citations = [format_citation(chunk) for chunk in chunks]
     answer_text = top_chunk.text
     if chat_model is not None:
         answer_text = chat_model.complete(
-            system_prompt="Answer only from the supplied context and do not invent facts.",
+            system_prompt=_answer_system_prompt(),
             user_prompt=(
                 f"Question: {question}\n\n"
-                f"Context:\n{top_chunk.text}\n\n"
+                f"Context:\n{context_text}\n\n"
                 "Return a concise grounded answer."
             ),
         )
     return QueryAnswer(
         answer_text=answer_text,
-        citations=[format_citation(top_chunk)],
+        citations=citations if chat_model is not None else [format_citation(top_chunk)],
         evidence_note=f"Answered from {len(chunks)} retrieved chunk(s) for: {question}",
     )

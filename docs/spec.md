@@ -33,7 +33,9 @@ The system is designed in two phases:
 1. User asks a natural-language question via CLI.
 2. Huginn embeds the question.
 3. Retrieves top-k chunks by cosine similarity against stored vectors.
-4. Generates an answer from the top retrieved chunk using the chat model.
+4. Generates an answer using the retrieved context:
+   - with a chat model, it loads `config/prompts/answer.txt` and passes all retrieved chunk text as context;
+   - without a chat model, it falls back to the top retrieved chunk verbatim.
 5. Returns the answer text, citations (file + page range), and an evidence note.
 
 If no sufficiently relevant chunks are found, returns a safe no-answer response instead of fabricating one.
@@ -107,7 +109,7 @@ src/huginn/
 ### 3.3 Key Design Decisions
 
 - **Model-agnostic**: all model interaction goes through OpenAI-compatible HTTP endpoints. No provider SDKs; uses `urllib` directly.
-- **Local-first**: no cloud dependencies. Two local `llama.cpp` servers (chat on `:1234`, embeddings on `:1235`).
+- **Local-first**: `local_only: true` now enforces localhost-only model endpoints at config validation time. The default setup uses two local `llama.cpp` servers (chat on `:1234`, embeddings on `:1235`).
 - **Extractor registry**: file-type routing in `extract/registry.py` keeps PDF-specific code isolated. Adding a new file type means adding an extractor class and extending the registry.
 - **Dual retrieval**: dense vector search via `sqlite-vec` when embeddings are available; sparse lexical (bag-of-words + cosine) as a zero-dependency fallback.
 - **Feature flags**: `features.*` in config gate Phase 2 capabilities. Phase 1 features (`ocr_fallback`) are also togglable.
@@ -125,7 +127,7 @@ source_files (
   source_file_id  INTEGER PRIMARY KEY,
   path            TEXT NOT NULL UNIQUE,
   sha256          TEXT NOT NULL,
-  file_type       TEXT NOT NULL,          -- "pdf" (extensible)
+  file_type       TEXT NOT NULL,          -- derived from the source path suffix
   modified_at     TEXT NOT NULL,
   status          TEXT NOT NULL,          -- "indexed" | "failed"
   error_message   TEXT
@@ -224,7 +226,7 @@ features:
 
 The Phase 2 flags exist in the schema so config files don't need editing later. The flags are currently inert — earlier no-op stub modules were removed during a cleanup pass to avoid the impression of partial behaviour.
 
-All config is validated at load time by Pydantic (`extra="forbid"` on all models). Invalid keys, missing fields, or constraint violations raise immediately.
+All config is validated at load time by Pydantic (`extra="forbid"` on all models). Invalid keys, missing fields, non-local endpoints under `local_only: true`, or other constraint violations raise immediately.
 
 ---
 
@@ -316,11 +318,13 @@ When no embedder is provided:
 Implemented in `answer/generate.py`.
 
 1. If no chunks were retrieved, return a fixed no-answer response.
-2. Otherwise, take the top-ranked chunk.
-3. If a `ChatModel` is available, call it with a system prompt ("Answer only from the supplied context...") and the chunk text as context.
+2. Otherwise, keep the top-ranked chunk as the fallback answer source.
+3. If a `ChatModel` is available, load `config/prompts/answer.txt` and call it with all retrieved chunk text as context.
 4. If no chat model is available, return the top chunk text verbatim as the answer.
 5. Format citations as `<filename>#page=<N>` or `<filename>#pages=<N>-<M>`.
 6. Return `QueryAnswer` with `answer_text`, `citations`, and `evidence_note`.
+   - chat path: include citations for every retrieved chunk passed to the model;
+   - fallback path: cite only the top chunk that supplied the answer text.
 
 ### 10.1 No-Answer Policy
 
@@ -580,5 +584,5 @@ These must hold at all times. If one breaks, it's a bug.
 6. `RuntimeConfig` validation rejects unknown keys, missing fields, and `chunk_overlap >= chunk_size`.
 7. After changing the embedding model or endpoint, `ingest --reindex` is required — stale vectors will not match.
 8. All tests pass without running llama.cpp servers (stubs and mocks only).
-9. The `local_only: true` config flag means no outbound network calls to cloud services.
+9. The `local_only: true` config flag is enforced at config-load time by rejecting non-local model endpoint hosts.
 10. File discovery skips dot-directories (e.g., `.git/`, `.venv/`).

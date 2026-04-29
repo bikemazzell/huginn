@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 from functools import lru_cache
 from pathlib import Path
@@ -11,6 +12,7 @@ from huginn.schemas import ChunkRecord, ExtractedDocument, RetrievedChunk
 
 _QUERY_DIR = Path(__file__).parent / "queries"
 _MIGRATION_DIR = Path(__file__).parent / "migrations"
+_VEC_DIMENSION_RE = re.compile(r"embedding float\[(\d+)\]")
 
 
 @lru_cache(maxsize=None)
@@ -61,6 +63,7 @@ class SQLiteStore:
         embeddings: list[list[float] | dict[str, float]],
     ) -> None:
         source_path_str = str(Path(source_path))
+        file_type = _file_type_for_path(source_path)
         cursor = self.connection.cursor()
         existing = cursor.execute(
             _query("select_source_file_id"),
@@ -69,6 +72,10 @@ class SQLiteStore:
 
         if existing is not None:
             source_file_id = existing["source_file_id"]
+            cursor.execute(
+                _query("delete_vec_chunks_for_source"),
+                (source_file_id,),
+            )
             document_rows = cursor.execute(
                 _query("select_documents_for_source"),
                 (source_file_id,),
@@ -77,12 +84,12 @@ class SQLiteStore:
                 cursor.execute(_query("delete_document"), (row["document_id"],))
             cursor.execute(
                 _query("update_source_file"),
-                (sha256, "pdf", modified_at, "indexed", source_file_id),
+                (sha256, file_type, modified_at, "indexed", source_file_id),
             )
         else:
             cursor.execute(
                 _query("insert_source_file"),
-                (source_path_str, sha256, "pdf", modified_at, "indexed"),
+                (source_path_str, sha256, file_type, modified_at, "indexed"),
             )
             source_file_id = int(cursor.lastrowid)
 
@@ -134,7 +141,14 @@ class SQLiteStore:
     def mark_failed(self, path: str | Path, sha256: str, modified_at: str, error_message: str) -> None:
         self.connection.execute(
             _query("upsert_failed_source"),
-            (str(Path(path)), sha256, "pdf", modified_at, "failed", error_message),
+            (
+                str(Path(path)),
+                sha256,
+                _file_type_for_path(path),
+                modified_at,
+                "failed",
+                error_message,
+            ),
         )
         self.connection.commit()
 
@@ -198,14 +212,18 @@ class SQLiteStore:
         if self._vec_dimensions == dimensions:
             return
         if self._vec_dimensions is None:
-            existing = self.connection.execute(_query("select_vec_chunks_table")).fetchone()
-            if existing is None:
+            existing_dimensions = self._existing_vec_dimensions()
+            if existing_dimensions is None:
                 self.connection.execute(
                     _query("create_vec_chunks").format(dimensions=dimensions)
                 )
                 self._vec_dimensions = dimensions
                 return
-            self._vec_dimensions = dimensions
+            self._vec_dimensions = existing_dimensions
+            if existing_dimensions != dimensions:
+                raise ValueError(
+                    f"Embedding dimension changed from {existing_dimensions} to {dimensions}"
+                )
             return
         if self._vec_dimensions != dimensions:
             raise ValueError(
@@ -220,8 +238,22 @@ class SQLiteStore:
             return sqlite_vec.serialize_float32(embedding)
         return None
 
+    def _existing_vec_dimensions(self) -> int | None:
+        row = self.connection.execute(_query("select_vec_chunks_schema")).fetchone()
+        if row is None:
+            return None
+        match = _VEC_DIMENSION_RE.search(row["sql"])
+        if match is None:
+            raise ValueError("Could not determine vec_chunks embedding dimensions")
+        return int(match.group(1))
+
 
 def sha256_text(value: str) -> str:
     from hashlib import sha256
 
     return sha256(value.encode("utf-8")).hexdigest()
+
+
+def _file_type_for_path(path: str | Path) -> str:
+    suffix = Path(path).suffix.lower().lstrip(".")
+    return suffix or "unknown"

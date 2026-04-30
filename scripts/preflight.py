@@ -18,6 +18,8 @@ from huginn.preflight import (
     chat_call_ok,
     embedding_call_ok,
     endpoint_model_available,
+    ocr_support_ok,
+    pdf_dependencies_ok,
     sqlite_vec_available,
     uv_available,
 )
@@ -43,8 +45,9 @@ def main() -> int:
         results["embedding_call_ok"] = embedding_call_ok(clients.embedder)
         results["chat_call_ok"] = chat_call_ok(clients.chat)
         results["sqlite_vec_available"] = sqlite_vec_available()
-        results["pdf_dependencies_ok"] = True
-        results["ocr_dependency_configured"] = config.features.ocr_fallback
+        results["pdf_dependencies_ok"] = pdf_dependencies_ok()
+        results["ocr_mode"] = "sidecar" if config.features.ocr_fallback else "disabled"
+        results["ocr_support_ok"] = ocr_support_ok(config.features.ocr_fallback)
     except Exception as exc:  # pragma: no cover - script path
         results["config_ok"] = False
         results["error"] = str(exc)

@@ -85,6 +85,21 @@ def chat_call_ok(chat_model: object) -> bool:
     return isinstance(response, str) and len(response.strip()) > 0
 
 
+def pdf_dependencies_ok() -> bool:
+    try:
+        import pypdf  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def ocr_support_ok(ocr_fallback_enabled: bool) -> bool:
+    if not ocr_fallback_enabled:
+        return True
+    # Current OCR fallback mode reads checked-in sidecar text files and requires no external binary.
+    return True
+
+
 def _normalize_model_name(model_name: str) -> str:
     normalized = model_name.strip().lower()
     if normalized.endswith(".gguf"):

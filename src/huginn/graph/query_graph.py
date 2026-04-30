@@ -4,6 +4,7 @@ from typing import TypedDict
 from langgraph.graph import END, StateGraph
 
 from huginn.answer.generate import ChatModel, generate_answer
+from huginn.answer.validate import validate_answer
 from huginn.config import RuntimeConfig
 from huginn.retrieve.basic import Embedder, retrieve_top_chunks
 from huginn.retrieve.rewrite import rewrite_query
@@ -36,11 +37,13 @@ def run_query(
     graph.add_node("retrieve", _retrieve)
     graph.add_node("rerank", _rerank)
     graph.add_node("answer", _answer)
+    graph.add_node("validate", _validate)
     graph.set_entry_point("rewrite")
     graph.add_edge("rewrite", "retrieve")
     graph.add_edge("retrieve", "rerank")
     graph.add_edge("rerank", "answer")
-    graph.add_edge("answer", END)
+    graph.add_edge("answer", "validate")
+    graph.add_edge("validate", END)
     compiled = graph.compile()
     result = compiled.invoke(
         {
@@ -103,6 +106,18 @@ def _retrieve_limit(config: RuntimeConfig) -> int:
 def _answer(state: QueryState) -> QueryState:
     answer = generate_answer(
         state["question"],
+        state["chunks"],
+        chat_model=state["chat_model"],
+    )
+    return {**state, "answer": answer}
+
+
+def _validate(state: QueryState) -> QueryState:
+    if not state["config"].features.answer_validation:
+        return state
+    answer = validate_answer(
+        state["question"],
+        state["answer"],
         state["chunks"],
         chat_model=state["chat_model"],
     )

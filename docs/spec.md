@@ -9,7 +9,7 @@ Huginn is a **local-first, model-agnostic document RAG system**. It indexes a fo
 The system is designed in two phases:
 
 - **Phase 1 (complete)** — basic retrieve-then-read: discover, extract, chunk, embed, retrieve top-k, answer with citations.
-- **Phase 2 (partially implemented)** — query rewriting and reranking are now available behind feature flags; answer validation and deeper eval automation/coverage work remain open. See §16.
+- **Phase 2 (partially implemented)** — query rewriting, reranking, and answer validation are now available behind feature flags; deeper eval automation/coverage work remains open. See §16.
 
 ---
 
@@ -226,10 +226,10 @@ features:
   ocr_fallback: true
   query_rewrite: false      # Rewrites only the retrieval query; original question is preserved for answering
   rerank: false             # Enables lexical reranking over a widened retrieval pool
-  answer_validation: false  # Phase 2 flag — no implementation yet
+  answer_validation: false  # Validates generated answers against retrieved chunks and can replace unsupported output with a safe no-answer
 ```
 
-The Phase 2 flags exist in the schema so config files don't need editing later. `features.query_rewrite` and `features.rerank` are live; `features.answer_validation` remains a placeholder for future work.
+The Phase 2 flags exist in the schema so config files don't need editing later. `features.query_rewrite`, `features.rerank`, and `features.answer_validation` are live.
 
 All config is validated at load time by Pydantic (`extra="forbid"` on all models). Invalid keys, missing fields, non-local endpoints under `local_only: true`, or other constraint violations raise immediately.
 
@@ -382,7 +382,7 @@ Computed in `eval/metrics.py`:
 ### 11.3 Eval Runner
 
 `scripts/run_eval.py` loads config, loads dataset, builds runtime clients, runs the eval graph, and prints the report as JSON.
-If multiple `--config` paths are provided, it treats the first run as baseline and emits cross-run comparison deltas for the core metrics.
+If multiple `--config` paths are provided, it treats the first run as baseline, emits cross-run comparison deltas for the core metrics, and exits non-zero when a candidate regresses any tracked metric versus baseline.
 
 ---
 
@@ -401,12 +401,11 @@ If multiple `--config` paths are provided, it treats the first run as baseline a
 | Embedding call succeeds | `embedder.embed_text("preflight ping", kind="query")` |
 | Chat call succeeds | `chat_model.complete()` with ping/pong |
 | `sqlite-vec` loads | In-memory extension load test |
-| PDF deps (`pypdf`) importable | Hardcoded `True` (no actual import check) |
-| OCR configured | Reads `config.features.ocr_fallback` (no real OCR-tooling check) |
+| PDF deps (`pypdf`) importable | Real import check via `pdf_dependencies_ok()` |
+| OCR mode | `"sidecar"` when `ocr_fallback` is enabled, otherwise `"disabled"` |
+| OCR support | `ocr_support_ok()` reports the current sidecar OCR fallback mode as supported without external binaries |
 
 Model name matching normalizes by stripping `.gguf` suffix and comparing case-insensitively with prefix matching.
-
-Current limitation: PDF and OCR dependency checks in `scripts/preflight.py` are still placeholders rather than real dependency/tooling checks.
 
 ---
 
@@ -562,7 +561,7 @@ huginn/
 
 ## 16. Phase 2 Plan
 
-Phase 2 is **partially implemented**. `retrieve/rewrite.py` and `retrieve/rerank.py` are live behind feature flags. Answer validation is still future work; the module paths below are targets for the next implementations.
+Phase 2 is **partially implemented**. `retrieve/rewrite.py`, `retrieve/rerank.py`, and `answer/validate.py` are live behind feature flags. The remaining work is mostly eval automation/coverage and any future retrieval refinements.
 
 Recommended implementation order:
 
@@ -574,9 +573,9 @@ Recommended implementation order:
    - Current behavior: retrieve a wider candidate pool, rerank locally by lexical overlap with the question, then truncate back to `top_k`.
    - Future enhancement path: replace or augment the lexical reranker with a cross-encoder or LLM-based reranker if evals justify the added complexity.
 
-3. **Answer validation** — new file `answer/validate.py`, gated by `features.answer_validation`.
-   - Post-check whether the generated answer is grounded in cited chunks.
-   - Add a `validate` node after `answer` in the query graph.
+3. **Answer validation** — implemented in `answer/validate.py`, gated by `features.answer_validation`.
+   - Current behavior: uses `config/prompts/validate_answer.txt` and the chat model to return `SUPPORTED` or `UNSUPPORTED`.
+   - Unsupported answers are replaced with the standard safe no-answer response and empty citations.
 
 4. **Eval automation and coverage expansion**
    - Run eval with each Phase 2 feature toggled on/off independently.

@@ -4,6 +4,8 @@ from huginn.preflight import (
     chat_call_ok,
     embedding_call_ok,
     endpoint_model_available,
+    ocr_support_ok,
+    pdf_dependencies_ok,
     sqlite_vec_available,
     uv_available,
 )
@@ -106,3 +108,21 @@ def test_chat_call_ok_exercises_chat_model() -> None:
 
     assert chat_call_ok(chat) is True
     assert chat.calls
+
+
+def test_pdf_dependencies_ok_checks_pypdf_import(monkeypatch) -> None:
+    real_import = __import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "pypdf":
+            raise ImportError("missing pypdf")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    assert pdf_dependencies_ok() is False
+
+
+def test_ocr_support_ok_reflects_sidecar_mode() -> None:
+    assert ocr_support_ok(False) is True
+    assert ocr_support_ok(True) is True

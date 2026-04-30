@@ -18,11 +18,13 @@ Implemented:
 - weak-evidence refusal via configurable lexical and dense retrieval thresholds
 - query rewriting behind `features.query_rewrite`, using the chat model to rewrite only the retrieval query while preserving the original question for answer generation
 - reranking behind `features.rerank`, using a widened retrieval pool and lexical overlap to reorder candidates before answer generation
+- answer validation behind `features.answer_validation`, using the chat model to reject unsupported generated answers and replace them with the standard safe no-answer response
 - eval metrics covering retrieval hit rate, `precision@k`, `recall@k`, MRR, citation correctness, groundedness, answer-trait match, and no-answer correctness
-- eval runner support for baseline-vs-variant comparison output across multiple configs
+- eval runner support for baseline-vs-variant comparison output across multiple configs, with non-zero exit on regressions
+- broader default eval coverage across positive retrieval, OCR fallback, and no-answer cases
 - runtime/setup notes and a launcher script for the two-endpoint `llama.cpp` flow
 
-Deviation from the original plan: the original no-op Phase 2 stubs were removed when they provided no behavior. Query rewriting and reranking have since been reintroduced as real implementations; answer validation remains future work.
+Deviation from the original plan: the original no-op Phase 2 stubs were removed when they provided no behavior. Query rewriting, reranking, and answer validation have since been reintroduced as real implementations.
 
 Checklists below are the source of truth for what is complete versus open.
 
@@ -41,9 +43,7 @@ This follow-up block is complete:
 
 Once Phase 1.1 is complete, the recommended next order is:
 
-1. answer validation
-2. eval CI gating and broader dataset coverage
-3. preflight hardening for real PDF/OCR dependency checks
+1. preflight hardening for real PDF/OCR dependency checks
 
 ## Goal
 
@@ -789,9 +789,8 @@ Current note:
 - [x] LangGraph is used for workflow orchestration without unnecessary agent complexity
 - [x] Phase 1 stays basic while Phase 2 advanced patterns are explicitly captured
 
-Open implementation gaps that still matter despite the green checklist:
-- answer validation is not yet implemented.
-- `scripts/preflight.py` still hardcodes PDF/OCR dependency success instead of checking real dependencies.
+No major implementation gaps remain in the current Phase 2 feature set.
+Future OCR-engine integration would need additional tooling checks beyond the current sidecar OCR mode.
 
 ---
 

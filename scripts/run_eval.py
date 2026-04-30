@@ -53,6 +53,20 @@ def build_eval_payload(reports: dict[str, dict[str, float | int]]) -> dict[str, 
     return reports[baseline_name]
 
 
+def evaluate_regressions(comparisons: list[dict[str, object]]) -> list[str]:
+    regressions: list[str] = []
+    for comparison in comparisons:
+        candidate = str(comparison["candidate"])
+        metrics = comparison["metrics"]
+        assert isinstance(metrics, dict)
+        for metric_name, metric_values in metrics.items():
+            assert isinstance(metric_values, dict)
+            delta = float(metric_values["delta"])
+            if delta < 0:
+                regressions.append(f"{candidate} regressed {metric_name} by {delta:.3f}")
+    return regressions
+
+
 def main() -> int:
     args = parse_args()
     config_paths = [Path(path) for path in (args.configs or [str(ROOT / "config" / "runtime.yaml")])]
@@ -71,7 +85,13 @@ def main() -> int:
         )
 
     payload = build_eval_payload(reports)
+    comparisons = payload.get("comparisons", []) if isinstance(payload, dict) else []
+    regressions = evaluate_regressions(comparisons) if isinstance(comparisons, list) else []
+    if regressions and isinstance(payload, dict):
+        payload["regressions"] = regressions
     print(json.dumps(payload, indent=2))
+    if regressions:
+        return 1
     return 0
 
 

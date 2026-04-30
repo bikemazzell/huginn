@@ -16,5 +16,25 @@
       "I could not find grounded evidence"
     ],
     "expect_no_answer": true
+  },
+  {
+    "question": "Which vendor is mentioned in the scanned contract?",
+    "expected_citations": [
+      "scan.pdf#page=1"
+    ],
+    "expected_substrings": [
+      "Orion vendor"
+    ],
+    "expect_no_answer": false
+  },
+  {
+    "question": "What is the launch date?",
+    "expected_citations": [
+      "minutes.pdf#page=2"
+    ],
+    "expected_substrings": [
+      "2026-05-15"
+    ],
+    "expect_no_answer": false
   }
 ]

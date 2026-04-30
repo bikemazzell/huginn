@@ -70,3 +70,44 @@ def test_build_eval_payload_includes_comparisons_for_variants() -> None:
 
     assert payload["runs"]["baseline"]["total_cases"] == 2
     assert payload["comparisons"][0]["candidate"] == "rerank"
+
+
+def test_evaluate_regressions_passes_when_no_metric_drops() -> None:
+    module = _load_run_eval_script()
+
+    regressions = module.evaluate_regressions(
+        [
+            {
+                "baseline": "baseline",
+                "candidate": "rerank",
+                "metrics": {
+                    "retrieval_hit_rate": {"baseline": 0.5, "candidate": 0.75, "delta": 0.25},
+                    "groundedness": {"baseline": 0.5, "candidate": 0.5, "delta": 0.0},
+                },
+            }
+        ]
+    )
+
+    assert regressions == []
+
+
+def test_evaluate_regressions_reports_metric_drops() -> None:
+    module = _load_run_eval_script()
+
+    regressions = module.evaluate_regressions(
+        [
+            {
+                "baseline": "baseline",
+                "candidate": "rewrite",
+                "metrics": {
+                    "retrieval_hit_rate": {"baseline": 1.0, "candidate": 0.5, "delta": -0.5},
+                    "groundedness": {"baseline": 1.0, "candidate": 0.75, "delta": -0.25},
+                },
+            }
+        ]
+    )
+
+    assert regressions == [
+        "rewrite regressed retrieval_hit_rate by -0.500",
+        "rewrite regressed groundedness by -0.250",
+    ]

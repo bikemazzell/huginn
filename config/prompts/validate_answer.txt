@@ -1,1 +1,2 @@
-Validate whether the answer is grounded in the cited chunks and flag unsupported claims.
+Validate whether the answer is grounded in the provided chunks.
+Return exactly SUPPORTED or UNSUPPORTED.

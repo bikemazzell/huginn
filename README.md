@@ -24,13 +24,13 @@ Implemented now:
 - weak-evidence refusal via configurable dense/lexical retrieval thresholds
 - optional query rewrite stage that rewrites only the retrieval query while preserving the original user question for answer generation
 - optional lexical rerank stage that widens retrieval candidates before truncating back to `top_k`
+- optional answer validation stage that rejects unsupported generated answers with a safe no-answer response
 - eval runner with `precision@k`, `recall@k`, `MRR`, and baseline-vs-variant comparison output
 - deterministic validation/unit/smoke/e2e/regression tests
 - live local runtime with separate chat and embedding endpoints
 
 Still planned for later:
 
-- answer validation
 - additional file types
 
 ## Project Layout
@@ -170,6 +170,7 @@ The local eval runner currently reports:
 - no-answer correctness
 
 If multiple `--config` paths are provided, the first run is treated as baseline and the output includes metric deltas for the additional runs.
+When a comparison run regresses any tracked metric versus baseline, `scripts/run_eval.py` exits non-zero and includes a `regressions` list in the JSON output.
 
 The default dataset lives in [tests/fixtures/eval/dataset.json](tests/fixtures/eval/dataset.json).
 

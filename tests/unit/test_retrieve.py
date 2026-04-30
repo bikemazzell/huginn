@@ -48,6 +48,71 @@ def test_score_query_against_text_returns_zero_for_no_overlap() -> None:
     assert score_query_against_text("atlas budget", "completely unrelated words") == 0.0
 
 
+def test_lexical_features_tokenizes_cyrillic_and_accented_latin() -> None:
+    features = lexical_features("ПАПЮСА élève")
+
+    assert "папюса" in features
+    assert "élève" in features
+
+
+def test_retrieve_top_chunks_matches_exact_cyrillic_term() -> None:
+    text = "МАГІЯ -ПАПЮСА. Вышла изъ печати первая часть."
+    store = FakeSparseStore(
+        [
+            (
+                RetrievedChunk(
+                    chunk_id=1,
+                    source_path="/tmp/russian.pdf",
+                    page_start=1,
+                    page_end=1,
+                    text=text,
+                    score=0.0,
+                ),
+                lexical_features(text),
+            ),
+        ]
+    )
+
+    chunks = retrieve_top_chunks(
+        store,  # type: ignore[arg-type]
+        question="ПАПЮСА",
+        top_k=4,
+        min_lexical_score=0.2,
+    )
+
+    assert [chunk.chunk_id for chunk in chunks] == [1]
+    assert chunks[0].score == 1.0
+
+
+def test_retrieve_top_chunks_matches_natural_language_cyrillic_query() -> None:
+    text = "МАГІЯ -ПАПЮСА. Вышла изъ печати первая часть."
+    store = FakeSparseStore(
+        [
+            (
+                RetrievedChunk(
+                    chunk_id=1,
+                    source_path="/tmp/russian.pdf",
+                    page_start=1,
+                    page_end=1,
+                    text=text,
+                    score=0.0,
+                ),
+                lexical_features(text),
+            ),
+        ]
+    )
+
+    chunks = retrieve_top_chunks(
+        store,  # type: ignore[arg-type]
+        question="Что написано про ПАПЮСА?",
+        top_k=4,
+        min_lexical_score=0.2,
+    )
+
+    assert [chunk.chunk_id for chunk in chunks] == [1]
+    assert chunks[0].score >= 0.2
+
+
 def test_retrieve_top_chunks_filters_sparse_matches_below_min_score() -> None:
     strong_text = "atlas budget budget"
     weak_text = "atlas notes appendix"

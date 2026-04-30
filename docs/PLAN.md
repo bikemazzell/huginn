@@ -9,7 +9,7 @@ Implemented:
 - PDF extraction with sidecar OCR fallback
 - chunking, persistence, retrieval, and grounded answers with citations
 - CLI commands for `ingest`, `ask`, and `status`
-- validation/unit/smoke/e2e/regression test tiers (87 tests, all green at the last full run)
+- validation/unit/smoke/e2e/regression test tiers (91 tests, all green at the last full run)
 - live OpenAI-compatible chat + embedding endpoints, tested against local `llama.cpp`
 - fixture corpus, eval dataset, and local eval runner
 - `sqlite-vec` for dense vector storage and KNN retrieval
@@ -17,6 +17,7 @@ Implemented:
 - batched embedding with retry/split fallback so ingest can recover from embedding-server 500s caused by batch shape or oversized chunk inputs
 - weak-evidence refusal via configurable lexical and dense retrieval thresholds
 - hybrid dense + lexical retrieval fused via reciprocal rank fusion for stronger exact-match and named-entity recall
+- Unicode-aware lexical tokenization and multilingual stopword handling for non-English same-language retrieval, including Cyrillic queries
 - query rewriting behind `features.query_rewrite`, using the chat model to rewrite only the retrieval query while preserving the original question for answer generation
 - reranking behind `features.rerank`, using a widened retrieval pool and lexical overlap to reorder candidates before answer generation
 - answer validation behind `features.answer_validation`, using the chat model to reject unsupported generated answers and replace them with the standard safe no-answer response
@@ -46,8 +47,8 @@ This follow-up block is complete:
 Recommended next order:
 
 1. broader real-world eval corpus growth
-2. live-model smoke/e2e coverage for the supported `llama.cpp` runtime shape
-3. retrieval-quality refinement measured against the expanded eval corpus
+2. cross-language retrieval refinement measured against the pressure corpus
+3. live-model smoke/e2e coverage for the supported `llama.cpp` runtime shape
 4. chunking and latency tuning once the eval corpus is broad enough to make those tradeoffs visible
 
 ## Goal
@@ -521,10 +522,11 @@ These notes are distilled from production RAG systems on other domains and adapt
 
 #### Retrieval
 
-- **Hybrid retrieval (dense + lexical)** catches what either method alone misses. Dense embeddings blur exact-match queries — section numbers, named entities, acronyms, dates. Huginn now fuses dense and lexical rankings via reciprocal rank fusion. Future work here is refinement and measurement, not introducing the capability from scratch.
+- **Hybrid retrieval (dense + lexical)** catches what either method alone misses. Dense embeddings blur exact-match queries — section numbers, named entities, acronyms, dates. Huginn now fuses dense and lexical rankings via reciprocal rank fusion. The lexical side is Unicode-aware, so exact-term multilingual queries are no longer limited to ASCII text. Future work here is refinement and measurement, not introducing the capability from scratch.
 - **Retrieve wide, rerank narrow**: top-N around 20-30 from retrieval, then rerank down to top-K = 4-6 before generation. Never feed 20 chunks straight into the LLM — it costs context and dilutes attention.
   - Phase 1.1 closed the earlier single-chunk prompt gap: the answer model now receives all retrieved chunks as context. Reranking still matters because retrieved context quality, ordering, and redundancy still directly affect the final answer.
 - **Pre-filter by metadata before vector scoring** when corpus segmentation matters (file type, modified-at range, language). Optional for general PDF corpora; essential for time-sensitive ones.
+- Pressure-corpus learning: same-language non-English retrieval now works materially better after moving the lexical tokenizer off an ASCII-only regex. The next multilingual gap is cross-language retrieval, not basic Unicode term matching.
 
 #### Embeddings
 

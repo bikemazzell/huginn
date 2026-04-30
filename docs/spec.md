@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-Huginn is a **local-first, model-agnostic document RAG system**. It indexes a folder of PDFs recursively and answers natural-language questions over the corpus with grounded answers and citations.
+Huginn is a **local-first, model-agnostic document RAG system**. It indexes a folder of PDFs recursively and answers natural-language questions over the corpus with grounded answers and citations. The current implementation supports non-English text and queries as long as extraction succeeds and retrieval can ground the answer.
 
 The system is designed in two phases:
 
@@ -119,6 +119,7 @@ src/huginn/
 - **Explicit local runtime wiring**: the bundled `scripts/start_llama_servers.py` launcher starts the two-endpoint `llama.cpp` setup, but requires the chat GGUF path and matching `mmproj` path to be supplied explicitly rather than assuming machine-specific filesystem locations.
 - **Extractor registry**: file-type routing in `extract/registry.py` keeps PDF-specific code isolated. Adding a new file type means adding an extractor class and extending the registry.
 - **Hybrid retrieval**: dense vector search via `sqlite-vec` is fused with lexical text matching via reciprocal rank fusion when embeddings are available; sparse lexical retrieval also remains available as a zero-dependency fallback.
+- **Unicode-aware lexical fallback**: the lexical tokenizer is Unicode-aware rather than ASCII-only, so non-English scripts such as Cyrillic and accented Latin text remain searchable through the fallback path.
 - **Feature flags**: `features.*` in config gate Phase 2 capabilities. Phase 1 features (`ocr_fallback`) are also togglable.
 
 ---
@@ -321,6 +322,7 @@ When no embedder is provided:
 2. Score via cosine similarity.
 3. Filter out matches below `indexing.min_lexical_score`, sort by score descending, return top-k.
 4. Full query-token coverage counts as strong lexical evidence even when cosine score is diluted by long chunks.
+5. Tokenization is Unicode-aware, so non-English exact-term retrieval is preserved in the lexical path.
 
 ### 9.3 Scoring
 
@@ -329,6 +331,12 @@ When no embedder is provided:
 - Hybrid: fused score = reciprocal rank fusion over dense and lexical rankings.
 - Secondary sort: fewer pages, shorter text, lower chunk_id.
 - Dense retrieval also rejects matches whose raw distance exceeds `indexing.max_dense_distance`.
+
+### 9.4 Current Multilingual Behavior
+
+- Same-language non-English retrieval is supported in the lexical and hybrid paths.
+- Unicode terms in scripts such as Cyrillic are preserved by the lexical tokenizer.
+- Cross-language retrieval remains weaker than same-language retrieval and is still a tuning area for rewrite and ranking behavior.
 
 ---
 

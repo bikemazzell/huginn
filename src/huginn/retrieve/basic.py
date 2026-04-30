@@ -7,7 +7,7 @@ from huginn.schemas import RetrievedChunk
 from huginn.store.sqlite import SQLiteStore
 
 
-TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 STOPWORDS = frozenset(
     (Path(__file__).parent / "stopwords.txt").read_text(encoding="utf-8").split()
 )

@@ -1,6 +1,6 @@
 # Huginn
 
-Huginn is a local-first document RAG system for recursively indexing a folder of PDFs and answering grounded questions with citations.
+Huginn is a local-first document RAG system for recursively indexing a folder of PDFs and answering grounded questions with citations, including non-English corpora and queries.
 
 The current implementation is a Phase 1 baseline:
 
@@ -21,6 +21,7 @@ Implemented now:
 - PDF extraction with OCR sidecar fallback
 - LangGraph-based ingest, query, and eval flows
 - `sqlite-vec`-backed dense vector storage plus lexical retrieval fused for stronger exact-match recall
+- Unicode-aware lexical retrieval, so Cyrillic and accented Latin queries are not dropped by the fallback path
 - weak-evidence refusal via configurable dense/lexical retrieval thresholds
 - optional query rewrite stage that rewrites only the retrieval query while preserving the original user question for answer generation
 - optional lexical rerank stage that widens retrieval candidates before truncating back to `top_k`
@@ -183,6 +184,14 @@ When a comparison run regresses any tracked metric versus baseline, `scripts/run
 The repository also includes a GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that runs the full test suite plus the offline fixture-corpus eval gate.
 
 The default dataset lives in [tests/fixtures/eval/dataset.json](tests/fixtures/eval/dataset.json).
+
+## Language Support
+
+Huginn is not English-only. The current retrieval stack supports non-English text and queries, including Unicode lexical matching for scripts such as Cyrillic and accented Latin text.
+
+Current practical status:
+- multilingual exact-term and same-language retrieval work
+- mixed-language retrieval remains an active tuning area, especially when the user asks in one language about content written in another
 
 ## Planning
 

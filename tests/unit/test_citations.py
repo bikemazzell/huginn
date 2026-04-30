@@ -28,7 +28,7 @@ def test_format_citation_uses_page_range_for_multi_page_chunk() -> None:
     assert format_citation(chunk) == "sample.pdf#pages=2-4"
 
 
-def test_format_citation_prefers_visible_page_label_when_present() -> None:
+def test_format_citation_uses_pdf_page_indices_even_when_visible_page_label_is_present() -> None:
     chunk = RetrievedChunk(
         chunk_id=1,
         source_path="/tmp/sample.pdf",
@@ -38,4 +38,4 @@ def test_format_citation_prefers_visible_page_label_when_present() -> None:
         score=0.9,
     )
 
-    assert format_citation(chunk) == "sample.pdf#page=47"
+    assert format_citation(chunk) == "sample.pdf#pages=49-50"

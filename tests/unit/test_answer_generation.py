@@ -167,7 +167,7 @@ def test_generate_answer_prefers_narrower_overlapping_chat_citation() -> None:
     assert answer.citations == ["german-course.pdf#page=50"]
 
 
-def test_generate_answer_prefers_overlapping_chunk_with_visible_page_label() -> None:
+def test_generate_answer_prefers_narrower_chunk_even_when_other_overlap_has_visible_page_label() -> None:
     chat = DummyChatModel("The phone number is 020 7873 6400.")
 
     answer = generate_answer(
@@ -193,4 +193,4 @@ def test_generate_answer_prefers_overlapping_chunk_with_visible_page_label() -> 
         chat_model=chat,
     )
 
-    assert answer.citations == ["german-course.pdf#page=47"]
+    assert answer.citations == ["german-course.pdf#page=50"]

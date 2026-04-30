@@ -13,7 +13,6 @@ class ChatModel(Protocol):
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 URL_RE = re.compile(r"\bhttps?://\S+\b")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{6,}\d)")
-VISIBLE_PAGE_RE = re.compile(r"\b(?:Page|Seite)\s+(\d+)\b", re.IGNORECASE)
 
 
 @lru_cache(maxsize=1)
@@ -24,9 +23,6 @@ def _answer_system_prompt() -> str:
 
 def format_citation(chunk: RetrievedChunk) -> str:
     filename = Path(chunk.source_path).name
-    visible_page = _visible_page_label(chunk.text)
-    if visible_page is not None:
-        return f"{filename}#page={visible_page}"
     if chunk.page_start == chunk.page_end:
         return f"{filename}#page={chunk.page_start}"
     return f"{filename}#pages={chunk.page_start}-{chunk.page_end}"
@@ -109,20 +105,7 @@ def _page_span(chunk: RetrievedChunk) -> int:
 
 
 def _prefer_chunk_over_existing(chunk: RetrievedChunk, existing: RetrievedChunk) -> bool:
-    chunk_visible = _visible_page_label(chunk.text)
-    existing_visible = _visible_page_label(existing.text)
-    if chunk_visible is not None and existing_visible is None:
-        return True
-    if chunk_visible is None and existing_visible is not None:
-        return False
     return _page_span(chunk) < _page_span(existing)
-
-
-def _visible_page_label(text: str) -> int | None:
-    match = VISIBLE_PAGE_RE.search(text)
-    if match is None:
-        return None
-    return int(match.group(1))
 
 
 def _supporting_chunks(answer_text: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:

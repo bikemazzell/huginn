@@ -20,7 +20,6 @@ Implemented:
 - Unicode-aware lexical tokenization and multilingual stopword handling for non-English same-language retrieval, including Cyrillic queries
 - small multilingual query-term normalization for contact/info retrieval across languages
 - chat-answer citation filtering that removes unsupported retrieved chunks and prefers narrower overlapping page references
-- visible printed page-label detection so citations can prefer document page markers over raw PDF page indices
 - query rewriting behind `features.query_rewrite`, using the chat model to rewrite only the retrieval query while preserving the original question for answer generation
 - reranking behind `features.rerank`, using a widened retrieval pool and lexical overlap to reorder candidates before answer generation
 - answer validation behind `features.answer_validation`, using the chat model to reject unsupported generated answers and replace them with the standard safe no-answer response

@@ -1,0 +1,25 @@
+root_path: tests/fixtures/corpus
+local_only: true
+
+models:
+  chat:
+    base_url: http://127.0.0.1:1234/v1
+    api_key: offline
+    model: disabled
+  embedding:
+    base_url: http://127.0.0.1:1234/v1
+    api_key: offline
+    model: local-lexical
+
+indexing:
+  chunk_size: 128
+  chunk_overlap: 24
+  top_k: 4
+  min_lexical_score: 0.2
+  max_dense_distance: 0.7
+
+features:
+  ocr_fallback: true
+  query_rewrite: false
+  rerank: false
+  answer_validation: false

@@ -36,5 +36,25 @@
       "2026-05-15"
     ],
     "expect_no_answer": false
+  },
+  {
+    "question": "Which project has a budget of 1200 dollars?",
+    "expected_citations": [
+      "atlas.pdf#page=1"
+    ],
+    "expected_substrings": [
+      "Project Atlas budget is 1200 dollars"
+    ],
+    "expect_no_answer": false
+  },
+  {
+    "question": "What does the scanned contract mention?",
+    "expected_citations": [
+      "scan.pdf#page=1"
+    ],
+    "expected_substrings": [
+      "Scanned contract mentions Orion vendor"
+    ],
+    "expect_no_answer": false
   }
 ]

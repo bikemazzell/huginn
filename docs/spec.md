@@ -24,7 +24,7 @@ The system is designed in two phases:
    - Extracts text page-by-page using `pypdf`.
    - Falls back to OCR sidecar text (`<filename>.ocr.txt`) when a page has no extractable text and `features.ocr_fallback` is enabled.
    - Chunks the extracted text with configurable size and overlap.
-   - Embeds chunks via the configured embedding model (or a lexical fallback).
+  - Embeds chunks via the configured embedding model (or a lexical fallback).
    - Persists metadata, chunk text, and vectors to SQLite.
 4. Reports counts: discovered, indexed, skipped, failed.
 
@@ -114,7 +114,7 @@ src/huginn/
 - **Local-first**: `local_only: true` now enforces localhost-only model endpoints at config validation time. The default setup uses two local `llama.cpp` servers (chat on `:1234`, embeddings on `:1235`).
 - **Explicit local runtime wiring**: the bundled `scripts/start_llama_servers.py` launcher starts the two-endpoint `llama.cpp` setup, but requires the chat GGUF path and matching `mmproj` path to be supplied explicitly rather than assuming machine-specific filesystem locations.
 - **Extractor registry**: file-type routing in `extract/registry.py` keeps PDF-specific code isolated. Adding a new file type means adding an extractor class and extending the registry.
-- **Dual retrieval**: dense vector search via `sqlite-vec` when embeddings are available; sparse lexical (bag-of-words + cosine) as a zero-dependency fallback.
+- **Hybrid retrieval**: dense vector search via `sqlite-vec` is fused with lexical text matching via reciprocal rank fusion when embeddings are available; sparse lexical retrieval also remains available as a zero-dependency fallback.
 - **Feature flags**: `features.*` in config gate Phase 2 capabilities. Phase 1 features (`ocr_fallback`) are also togglable.
 
 ---
@@ -235,6 +235,8 @@ All config is validated at load time by Pydantic (`extra="forbid"` on all models
 
 `indexing.min_lexical_score` and `indexing.max_dense_distance` define the weak-evidence refusal floor for sparse retrieval and the distance ceiling for dense retrieval.
 
+For offline CI evals, the repo also ships `config/ci_eval.yaml`, which uses `local-lexical` embeddings and a disabled chat model so `scripts/run_eval.py` can run without live model endpoints.
+
 ---
 
 ## 6. LLM Integration
@@ -299,24 +301,28 @@ This produces overlapping, page-aware chunks suitable for citation tracking.
 
 Implemented in `retrieve/basic.py`. Two modes:
 
-### 9.1 Dense Retrieval (default)
+### 9.1 Hybrid Dense + Lexical Retrieval (default)
 
 When a real `Embedder` is provided:
 1. Embed the question via `embedder.embed_text(question, kind="query")`.
-2. Query `vec_chunks` via sqlite-vec for the `limit` nearest neighbors.
-3. Return chunks sorted by ascending distance (lower = more similar).
+2. Query `vec_chunks` via sqlite-vec for a widened candidate set.
+3. Score lexical matches over chunk text for the same query.
+4. Fuse dense and lexical rankings via reciprocal rank fusion.
+5. Return top-k fused results.
 
-### 9.2 Lexical Fallback
+### 9.2 Lexical Retrieval
 
-When no embedder is provided:
+When no embedder is provided, or when dense retrieval yields no acceptable matches:
 1. Compute sparse bag-of-words vectors for the question and all stored chunks (stopword-filtered).
 2. Score via cosine similarity.
 3. Filter out matches below `indexing.min_lexical_score`, sort by score descending, return top-k.
+4. Full query-token coverage counts as strong lexical evidence even when cosine score is diluted by long chunks.
 
 ### 9.3 Scoring
 
-- Dense: score = negative distance (higher = better match).
+- Dense: score = negative distance (higher = better match) before rank fusion.
 - Lexical: score = cosine similarity (0 to 1).
+- Hybrid: fused score = reciprocal rank fusion over dense and lexical rankings.
 - Secondary sort: fewer pages, shorter text, lower chunk_id.
 - Dense retrieval also rejects matches whose raw distance exceeds `indexing.max_dense_distance`.
 
@@ -383,6 +389,7 @@ Computed in `eval/metrics.py`:
 
 `scripts/run_eval.py` loads config, loads dataset, builds runtime clients, runs the eval graph, and prints the report as JSON.
 If multiple `--config` paths are provided, it treats the first run as baseline, emits cross-run comparison deltas for the core metrics, and exits non-zero when a candidate regresses any tracked metric versus baseline.
+The repo’s GitHub Actions workflow uses `config/ci_eval.yaml` plus the fixture corpus to run this gate offline on every push and pull request.
 
 ---
 

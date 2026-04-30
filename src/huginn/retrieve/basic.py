@@ -67,20 +67,24 @@ def retrieve_top_chunks(
             min_lexical_score=min_lexical_score,
         )
 
-    matches = store.query_nearest_chunks(question_vector, limit=top_k)
+    candidate_limit = max(top_k * 3, top_k)
+    matches = store.query_nearest_chunks(question_vector, limit=candidate_limit)
     dense_chunks = [
         chunk.model_copy(update={"score": -distance})
         for chunk, distance in matches
         if distance <= max_dense_distance
     ]
-    if dense_chunks:
-        return dense_chunks
-    return _retrieve_lexical_chunks(
+    lexical_chunks = _retrieve_lexical_chunks(
         store,
         question=question,
-        top_k=top_k,
+        top_k=candidate_limit,
         min_lexical_score=min_lexical_score,
     )
+    if dense_chunks and lexical_chunks:
+        return _fuse_rankings(dense_chunks, lexical_chunks, top_k=top_k)
+    if dense_chunks:
+        return dense_chunks[:top_k]
+    return lexical_chunks[:top_k]
 
 
 def _retrieve_lexical_chunks(
@@ -116,6 +120,37 @@ def _token_coverage(query_tokens: set[str], chunk_features: dict[str, float]) ->
         return 0.0
     matched = sum(1 for token in query_tokens if token in chunk_features)
     return matched / len(query_tokens)
+
+
+def _fuse_rankings(
+    dense_chunks: list[RetrievedChunk],
+    lexical_chunks: list[RetrievedChunk],
+    *,
+    top_k: int,
+) -> list[RetrievedChunk]:
+    fused_scores: dict[int, float] = {}
+    chunks_by_id: dict[int, RetrievedChunk] = {}
+    for ranking in (dense_chunks, lexical_chunks):
+        for rank, chunk in enumerate(ranking, start=1):
+            fused_scores[chunk.chunk_id] = fused_scores.get(chunk.chunk_id, 0.0) + _rrf_score(rank)
+            chunks_by_id[chunk.chunk_id] = chunk
+    fused = [
+        chunks_by_id[chunk_id].model_copy(update={"score": score})
+        for chunk_id, score in fused_scores.items()
+    ]
+    fused.sort(
+        key=lambda chunk: (
+            -chunk.score,
+            (chunk.page_end - chunk.page_start),
+            len(chunk.text.split()),
+            chunk.chunk_id,
+        )
+    )
+    return fused[:top_k]
+
+
+def _rrf_score(rank: int, *, k: int = 60) -> float:
+    return 1.0 / (k + rank)
 
 
 def cosine_similarity(

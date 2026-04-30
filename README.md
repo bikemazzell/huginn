@@ -20,7 +20,7 @@ Implemented now:
 - recursive folder ingest
 - PDF extraction with OCR sidecar fallback
 - LangGraph-based ingest, query, and eval flows
-- `sqlite-vec`-backed dense vector storage and nearest-neighbor retrieval
+- `sqlite-vec`-backed dense vector storage plus lexical retrieval fused for stronger exact-match recall
 - weak-evidence refusal via configurable dense/lexical retrieval thresholds
 - optional query rewrite stage that rewrites only the retrieval query while preserving the original user question for answer generation
 - optional lexical rerank stage that widens retrieval candidates before truncating back to `top_k`
@@ -121,6 +121,13 @@ Compare multiple runtime configs against a baseline:
 python scripts/run_eval.py --config config/runtime.yaml --config config/variant.yaml
 ```
 
+Run the offline fixture-corpus eval used by CI:
+
+```bash
+python -m huginn.cli --config config/ci_eval.yaml --db-path /tmp/huginn-ci-eval.db ingest --reindex tests/fixtures/corpus
+python scripts/run_eval.py --config config/ci_eval.yaml --db-path /tmp/huginn-ci-eval.db
+```
+
 ## Runtime Notes
 
 - Huginn is model-agnostic at the config level as long as the endpoints are OpenAI-compatible.
@@ -171,6 +178,7 @@ The local eval runner currently reports:
 
 If multiple `--config` paths are provided, the first run is treated as baseline and the output includes metric deltas for the additional runs.
 When a comparison run regresses any tracked metric versus baseline, `scripts/run_eval.py` exits non-zero and includes a `regressions` list in the JSON output.
+The repository also includes a GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that runs the full test suite plus the offline fixture-corpus eval gate.
 
 The default dataset lives in [tests/fixtures/eval/dataset.json](tests/fixtures/eval/dataset.json).
 

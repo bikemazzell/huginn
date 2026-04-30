@@ -8,7 +8,7 @@ from huginn.schemas import ModelsConfig
 @dataclass
 class RuntimeClients:
     embedder: object
-    chat: object
+    chat: object | None
 
 
 class LocalLexicalEmbedder:
@@ -59,7 +59,13 @@ def build_runtime_clients(models: ModelsConfig) -> RuntimeClients:
         else:
             embedder = raw_embedder
 
+    chat_model: object | None
+    if models.chat.model == "disabled":
+        chat_model = None
+    else:
+        chat_model = OpenAICompatibleChatModel(models.chat)
+
     return RuntimeClients(
         embedder=embedder,
-        chat=OpenAICompatibleChatModel(models.chat),
+        chat=chat_model,
     )

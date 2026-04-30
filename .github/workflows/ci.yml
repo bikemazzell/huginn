@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-eval:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pytest
+
+      - name: Run test suite
+        run: python -m pytest -q
+
+      - name: Build eval fixture database
+        run: |
+          python -m huginn.cli \
+            --config config/ci_eval.yaml \
+            --db-path /tmp/huginn-ci-eval.db \
+            ingest --reindex tests/fixtures/corpus
+
+      - name: Run offline eval gate
+        run: |
+          python scripts/run_eval.py \
+            --config config/ci_eval.yaml \
+            --db-path /tmp/huginn-ci-eval.db

@@ -9,8 +9,10 @@ def test_default_eval_dataset_covers_positive_negative_and_ocr_cases() -> None:
     cases = load_eval_dataset(dataset_path)
     questions = {case.question for case in cases}
 
-    assert len(cases) >= 4
+    assert len(cases) >= 6
     assert "What is the Project Atlas budget?" in questions
     assert "What is the employee vacation policy?" in questions
     assert "Which vendor is mentioned in the scanned contract?" in questions
     assert "What is the launch date?" in questions
+    assert "Which project has a budget of 1200 dollars?" in questions
+    assert "What does the scanned contract mention?" in questions

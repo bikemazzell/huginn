@@ -241,3 +241,47 @@ def test_retrieve_top_chunks_does_not_accept_partial_name_overlap_on_lexical_fal
     )
 
     assert chunks == []
+
+
+def test_retrieve_top_chunks_fuses_dense_and_lexical_rankings() -> None:
+    exact_match_chunk = RetrievedChunk(
+        chunk_id=2,
+        source_path="/tmp/apis.pdf",
+        page_start=82,
+        page_end=82,
+        text=(
+            'It might return this data: [{"id":2,"name":"Vincent Valentine", '
+            '"slug":"Vincent"}]'
+        ),
+        score=0.0,
+    )
+    loosely_related_chunk = RetrievedChunk(
+        chunk_id=1,
+        source_path="/tmp/essay.pdf",
+        page_start=1,
+        page_end=1,
+        text="A general discussion of romance, names, and unrelated characters.",
+        score=0.0,
+    )
+    store = FakeDenseStore(
+        [
+            (loosely_related_chunk, 0.15),
+            (exact_match_chunk, 0.45),
+        ],
+        text_rows=[
+            (loosely_related_chunk, [0.1, 0.2]),
+            (exact_match_chunk, [0.3, 0.4]),
+        ],
+    )
+
+    chunks = retrieve_top_chunks(
+        store,  # type: ignore[arg-type]
+        question="vincent valentine",
+        top_k=1,
+        embedder=FakeDenseEmbedder(),
+        min_lexical_score=0.2,
+        max_dense_distance=0.5,
+    )
+
+    assert [chunk.chunk_id for chunk in chunks] == [2]
+    assert "Vincent Valentine" in chunks[0].text

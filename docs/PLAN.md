@@ -22,6 +22,7 @@ Implemented:
 - eval metrics covering retrieval hit rate, `precision@k`, `recall@k`, MRR, citation correctness, groundedness, answer-trait match, and no-answer correctness
 - eval runner support for baseline-vs-variant comparison output across multiple configs, with non-zero exit on regressions
 - broader default eval coverage across positive retrieval, OCR fallback, and no-answer cases
+- GitHub Actions workflow running the full test suite plus an offline fixture-corpus eval gate via `config/ci_eval.yaml`
 - runtime/setup notes and a launcher script for the two-endpoint `llama.cpp` flow
 
 Deviation from the original plan: the original no-op Phase 2 stubs were removed when they provided no behavior. Query rewriting, reranking, and answer validation have since been reintroduced as real implementations.
@@ -43,7 +44,7 @@ This follow-up block is complete:
 
 Once Phase 1.1 is complete, the recommended next order is:
 
-1. preflight hardening for real PDF/OCR dependency checks
+1. broader real-world eval corpus growth
 
 ## Goal
 

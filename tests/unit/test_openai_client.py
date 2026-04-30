@@ -343,3 +343,22 @@ def test_build_runtime_clients_can_use_local_lexical_embedder() -> None:
     assert clients.embedder.embed_text("hello budget world") == lexical_features(
         "hello budget world"
     )
+
+
+def test_build_runtime_clients_can_disable_chat_model() -> None:
+    clients = build_runtime_clients(
+        ModelsConfig(
+            chat=ModelEndpointConfig(
+                base_url="http://127.0.0.1:1234/v1",
+                api_key="token",
+                model="disabled",
+            ),
+            embedding=ModelEndpointConfig(
+                base_url="http://127.0.0.1:1234/v1",
+                api_key="token",
+                model="local-lexical",
+            ),
+        )
+    )
+
+    assert clients.chat is None

@@ -191,7 +191,8 @@ Huginn is not English-only. The current retrieval stack supports non-English tex
 
 Current practical status:
 - multilingual exact-term and same-language retrieval work
-- mixed-language retrieval remains an active tuning area, especially when the user asks in one language about content written in another
+- limited cross-language retrieval normalization now exists for common contact/info query terms
+- broader mixed-language retrieval remains an active tuning area, especially when the user asks in one language about content written in another
 
 ## Planning
 

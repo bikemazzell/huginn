@@ -11,6 +11,18 @@ TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 STOPWORDS = frozenset(
     (Path(__file__).parent / "stopwords.txt").read_text(encoding="utf-8").split()
 )
+QUERY_TERM_ALIASES = {
+    "telefonnummer": ("call",),
+    "telefon": ("call", "phone"),
+    "nummer": (),
+    "email": ("email", "mail"),
+    "mail": ("email", "mail"),
+    "e": ("email",),
+    "courriel": ("email", "mail"),
+    "téléphone": ("call", "phone"),
+    "telefono": ("call", "phone"),
+    "телефон": ("call", "phone"),
+}
 
 
 class Embedder(Protocol):
@@ -27,6 +39,15 @@ def lexical_features(text: str) -> dict[str, float]:
     return _token_counts(text)
 
 
+def lexical_query_features(text: str) -> dict[str, float]:
+    counts = _token_counts(text)
+    expanded = dict(counts)
+    for token, value in counts.items():
+        for alias in QUERY_TERM_ALIASES.get(token, ()):
+            expanded[alias] = max(expanded.get(alias, 0.0), value * 2.0)
+    return expanded
+
+
 def _token_counts(text: str) -> dict[str, float]:
     counts: dict[str, float] = {}
     for token in TOKEN_RE.findall(text.lower()):
@@ -37,7 +58,7 @@ def _token_counts(text: str) -> dict[str, float]:
 
 
 def score_query_against_text(query: str, text: str) -> float:
-    return cosine_similarity(lexical_features(query), lexical_features(text))
+    return cosine_similarity(lexical_query_features(query), lexical_features(text))
 
 
 def retrieve_top_chunks(
@@ -95,7 +116,7 @@ def _retrieve_lexical_chunks(
     min_lexical_score: float,
 ) -> list[RetrievedChunk]:
     scored: list[RetrievedChunk] = []
-    query_features = lexical_features(question)
+    query_features = lexical_query_features(question)
     query_tokens = set(query_features)
     for chunk, _vector in store.load_chunks():
         chunk_features = lexical_features(chunk.text)

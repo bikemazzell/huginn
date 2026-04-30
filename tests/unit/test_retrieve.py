@@ -113,6 +113,51 @@ def test_retrieve_top_chunks_matches_natural_language_cyrillic_query() -> None:
     assert chunks[0].score >= 0.2
 
 
+def test_retrieve_top_chunks_matches_german_query_to_english_contact_chunk() -> None:
+    contact_text = (
+        "For general enquiries and for information about Michel Thomas: "
+        "Call: 020 7873 6400 Fax: 020 7873 6325 "
+        "Email: michelthomas-enquiries@hodder.co.uk"
+    )
+    distractor_text = "Michel Thomas taught in New York, Beverly Hills, and London."
+    store = FakeSparseStore(
+        [
+            (
+                RetrievedChunk(
+                    chunk_id=1,
+                    source_path="/tmp/german-course.pdf",
+                    page_start=2,
+                    page_end=2,
+                    text=contact_text,
+                    score=0.0,
+                ),
+                lexical_features(contact_text),
+            ),
+            (
+                RetrievedChunk(
+                    chunk_id=2,
+                    source_path="/tmp/german-course.pdf",
+                    page_start=6,
+                    page_end=6,
+                    text=distractor_text,
+                    score=0.0,
+                ),
+                lexical_features(distractor_text),
+            ),
+        ]
+    )
+
+    chunks = retrieve_top_chunks(
+        store,  # type: ignore[arg-type]
+        question="Was ist die Telefonnummer für Michel Thomas?",
+        top_k=4,
+        min_lexical_score=0.2,
+    )
+
+    assert chunks[0].chunk_id == 1
+    assert "020 7873 6400" in chunks[0].text
+
+
 def test_retrieve_top_chunks_filters_sparse_matches_below_min_score() -> None:
     strong_text = "atlas budget budget"
     weak_text = "atlas notes appendix"

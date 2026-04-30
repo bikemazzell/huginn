@@ -336,6 +336,7 @@ When no embedder is provided:
 
 - Same-language non-English retrieval is supported in the lexical and hybrid paths.
 - Unicode terms in scripts such as Cyrillic are preserved by the lexical tokenizer.
+- Query-side lexical normalization includes a small alias map for multilingual contact/info terms, so some cross-language queries can still retrieve English contact details.
 - Cross-language retrieval remains weaker than same-language retrieval and is still a tuning area for rewrite and ranking behavior.
 
 ---

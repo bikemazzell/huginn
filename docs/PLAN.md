@@ -9,7 +9,7 @@ Implemented:
 - PDF extraction with sidecar OCR fallback
 - chunking, persistence, retrieval, and grounded answers with citations
 - CLI commands for `ingest`, `ask`, and `status`
-- validation/unit/smoke/e2e/regression test tiers (91 tests, all green at the last full run)
+- validation/unit/smoke/e2e/regression test tiers (92 tests, all green at the last full run)
 - live OpenAI-compatible chat + embedding endpoints, tested against local `llama.cpp`
 - fixture corpus, eval dataset, and local eval runner
 - `sqlite-vec` for dense vector storage and KNN retrieval
@@ -18,6 +18,7 @@ Implemented:
 - weak-evidence refusal via configurable lexical and dense retrieval thresholds
 - hybrid dense + lexical retrieval fused via reciprocal rank fusion for stronger exact-match and named-entity recall
 - Unicode-aware lexical tokenization and multilingual stopword handling for non-English same-language retrieval, including Cyrillic queries
+- small multilingual query-term normalization for contact/info retrieval across languages
 - query rewriting behind `features.query_rewrite`, using the chat model to rewrite only the retrieval query while preserving the original question for answer generation
 - reranking behind `features.rerank`, using a widened retrieval pool and lexical overlap to reorder candidates before answer generation
 - answer validation behind `features.answer_validation`, using the chat model to reject unsupported generated answers and replace them with the standard safe no-answer response
@@ -526,7 +527,7 @@ These notes are distilled from production RAG systems on other domains and adapt
 - **Retrieve wide, rerank narrow**: top-N around 20-30 from retrieval, then rerank down to top-K = 4-6 before generation. Never feed 20 chunks straight into the LLM — it costs context and dilutes attention.
   - Phase 1.1 closed the earlier single-chunk prompt gap: the answer model now receives all retrieved chunks as context. Reranking still matters because retrieved context quality, ordering, and redundancy still directly affect the final answer.
 - **Pre-filter by metadata before vector scoring** when corpus segmentation matters (file type, modified-at range, language). Optional for general PDF corpora; essential for time-sensitive ones.
-- Pressure-corpus learning: same-language non-English retrieval now works materially better after moving the lexical tokenizer off an ASCII-only regex. The next multilingual gap is cross-language retrieval, not basic Unicode term matching.
+- Pressure-corpus learning: same-language non-English retrieval now works materially better after moving the lexical tokenizer off an ASCII-only regex. There is now a small cross-language normalization path for contact/info terms, but broader cross-language retrieval is still the next multilingual gap.
 
 #### Embeddings
 

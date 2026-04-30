@@ -38,8 +38,9 @@ The system is designed in two phases:
 6. Generates an answer using the retrieved context:
    - with a chat model, it loads `config/prompts/answer.txt` and passes all retrieved chunk text as context;
    - without a chat model, it falls back to the top retrieved chunk verbatim.
-7. Optionally validates the generated answer when `features.answer_validation` is enabled.
-8. Returns the answer text, citations (file + page range), and an evidence note.
+7. For chat-model answers, filters citations down to chunks that support the final answer text and collapses overlapping same-source citations toward the narrower page range.
+8. Optionally validates the generated answer when `features.answer_validation` is enabled.
+9. Returns the answer text, citations (file + page range), and an evidence note.
 
 If no sufficiently relevant chunks are found, returns a safe no-answer response instead of fabricating one.
 
@@ -351,7 +352,7 @@ Implemented in `answer/generate.py`.
 4. If no chat model is available, return the top chunk text verbatim as the answer.
 5. Format citations as `<filename>#page=<N>` or `<filename>#pages=<N>-<M>`.
 6. Return `QueryAnswer` with `answer_text`, `citations`, and `evidence_note`.
-   - chat path: include citations for every retrieved chunk passed to the model;
+   - chat path: include citations only for chunks that support the final answer text, collapsing overlapping same-source citations toward the narrower page span when possible;
    - fallback path: cite only the top chunk that supplied the answer text.
 
 ### 10.1 No-Answer Policy

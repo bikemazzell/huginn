@@ -26,6 +26,7 @@ Implemented now:
 - optional query rewrite stage that rewrites only the retrieval query while preserving the original user question for answer generation
 - optional lexical rerank stage that widens retrieval candidates before truncating back to `top_k`
 - optional answer validation stage that rejects unsupported generated answers with a safe no-answer response
+- citation post-filtering that keeps chat-model citations focused on chunks that actually support the final answer
 - eval runner with `precision@k`, `recall@k`, `MRR`, and baseline-vs-variant comparison output
 - deterministic validation/unit/smoke/e2e/regression tests
 - live local runtime with separate chat and embedding endpoints

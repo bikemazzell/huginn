@@ -2,20 +2,21 @@
 
 ## Status Snapshot
 
-As of 2026-04-29, Phase 1 plus the Phase 1.1 follow-ups are working locally.
+As of 2026-04-30, the baseline system plus the currently scoped retrieval and answer-quality features are working locally.
 
 Implemented:
 - recursive PDF ingest
 - PDF extraction with sidecar OCR fallback
 - chunking, persistence, retrieval, and grounded answers with citations
 - CLI commands for `ingest`, `ask`, and `status`
-- validation/unit/smoke/e2e/regression test tiers (63 tests, all green)
+- validation/unit/smoke/e2e/regression test tiers (87 tests, all green at the last full run)
 - live OpenAI-compatible chat + embedding endpoints, tested against local `llama.cpp`
 - fixture corpus, eval dataset, and local eval runner
 - `sqlite-vec` for dense vector storage and KNN retrieval
 - preflight that exercises live endpoint, model, embedding, and chat calls
 - batched embedding with retry/split fallback so ingest can recover from embedding-server 500s caused by batch shape or oversized chunk inputs
 - weak-evidence refusal via configurable lexical and dense retrieval thresholds
+- hybrid dense + lexical retrieval fused via reciprocal rank fusion for stronger exact-match and named-entity recall
 - query rewriting behind `features.query_rewrite`, using the chat model to rewrite only the retrieval query while preserving the original question for answer generation
 - reranking behind `features.rerank`, using a widened retrieval pool and lexical overlap to reorder candidates before answer generation
 - answer validation behind `features.answer_validation`, using the chat model to reject unsupported generated answers and replace them with the standard safe no-answer response
@@ -40,11 +41,14 @@ This follow-up block is complete:
 3. `[x]` Expand eval metrics to cover groundedness and clearer retrieval-quality signals.
 4. `[x]` Add a small amount of operational documentation for the current two-endpoint local setup (`Qwen` chat + `Nomic` embeddings via `llama.cpp`).
 
-### Phase 2 Ready Queue
+### Current Ready Queue
 
-Once Phase 1.1 is complete, the recommended next order is:
+Recommended next order:
 
 1. broader real-world eval corpus growth
+2. live-model smoke/e2e coverage for the supported `llama.cpp` runtime shape
+3. retrieval-quality refinement measured against the expanded eval corpus
+4. chunking and latency tuning once the eval corpus is broad enough to make those tradeoffs visible
 
 ## Goal
 
@@ -127,10 +131,10 @@ Phase 1 is **basic retrieve-then-read**:
 Phase 2 adds more advanced RAG patterns:
 
 - query rewriting
-- optional reranking
+- reranking
 - answer validation / groundedness checks
 - retrieval evaluation improvements
-- later, possibly hybrid retrieval and decomposition
+- hybrid retrieval and decomposition where justified by evals
 
 ---
 
@@ -517,7 +521,7 @@ These notes are distilled from production RAG systems on other domains and adapt
 
 #### Retrieval
 
-- **Hybrid retrieval (dense + sparse)** catches what either method alone misses. Dense embeddings blur exact-match queries — section numbers, named entities, acronyms, dates. SQLite's built-in FTS5 module gives BM25 keyword scoring without a new dependency. Combine the two rankings via reciprocal rank fusion (`score = Σ 1/(k + rank_i)`).
+- **Hybrid retrieval (dense + lexical)** catches what either method alone misses. Dense embeddings blur exact-match queries — section numbers, named entities, acronyms, dates. Huginn now fuses dense and lexical rankings via reciprocal rank fusion. Future work here is refinement and measurement, not introducing the capability from scratch.
 - **Retrieve wide, rerank narrow**: top-N around 20-30 from retrieval, then rerank down to top-K = 4-6 before generation. Never feed 20 chunks straight into the LLM — it costs context and dilutes attention.
   - Phase 1.1 closed the earlier single-chunk prompt gap: the answer model now receives all retrieved chunks as context. Reranking still matters because retrieved context quality, ordering, and redundancy still directly affect the final answer.
 - **Pre-filter by metadata before vector scoring** when corpus segmentation matters (file type, modified-at range, language). Optional for general PDF corpora; essential for time-sensitive ones.
@@ -535,7 +539,7 @@ These notes are distilled from production RAG systems on other domains and adapt
 
 #### Generation
 
-- The Phase 1 path uses a single chat model for the final answer. When Phase 2 query rewriting lands, it should be run through a smaller/cheaper model than the answerer (smaller local quant, or just a tighter system prompt with shorter max tokens). Heavy reasoning belongs only on the user-facing answer step.
+- The current path uses the configured chat model for query rewriting, answer generation, and answer validation when those features are enabled. A future optimization is to split those roles across smaller or cheaper local models if the eval and runtime cost justify the extra configuration surface.
 - Prompt structure already in place: system prompt loaded from `config/prompts/answer.txt`, user question, and retrieved chunk(s) as context. The prompt remains intentionally simple for Phase 1.
 - **Threshold-based refusal**: implemented. Phase 1 now refuses when retrieval yields only weak matches by applying configurable lexical and dense retrieval thresholds before answer generation.
 - Long-context note: frontier models in 2026 ship with 1M+ token windows, which loosens the retrieval-precision constraint for high-stakes paths. Local llama.cpp models typically run 8k-32k, so this lever applies only if remote endpoints are added later. Even with long context, retrieval still matters for cost, latency, and the audit trail behind every cited claim.
@@ -544,10 +548,10 @@ These notes are distilled from production RAG systems on other domains and adapt
 
 - The Phase 1 eval dataset (`tests/fixtures/eval/dataset.json`) is hand-curated, which is the right pattern. Production analogues call this a "gold set" curated by domain experts, refreshed as the corpus changes. The CLI/eval runner is in place, the harness scaffolding is fine.
 - Current metrics: retrieval hit rate, citation correctness, groundedness, answer-trait match, no-answer correctness, `precision@k`, `recall@k`, and mean reciprocal rank.
-- Still missing for Phase 2 comparison work:
+- Still missing for comparison work:
   - Faithfulness as a generation metric distinct from groundedness (does the answer claim only what the retrieved chunks actually say?).
 - External harnesses to know about: RAGAS is the most common in 2026, DeepEval and Braintrust are alternatives. Adopting one is optional — the local report dict is enough for Phase 1, but if Phase 2 needs richer per-case breakdowns, RAGAS-style metric definitions are a sensible reference.
-- Regression discipline: every retrieval, prompt, or model change should run the eval set and gate merge on no regression. Today `scripts/run_eval.py` can compare multiple configs and emit metric deltas; wiring that into CI is the next small piece of work.
+- Regression discipline: every retrieval, prompt, or model change should run the eval set and gate merge on no regression. That gate now exists in CI for the offline fixture-corpus path; the remaining work is to broaden the corpus and add stronger live-runtime coverage when needed.
 
 ---
 
@@ -688,10 +692,11 @@ If true model-backed e2e tests are added later, keep them separate from the defa
 
 ## 14. Retrieval and Answering Rules
 
-### Phase 1 retrieval
+### Current retrieval
 
-- embed the user question
-- retrieve top-k chunks
+- optionally rewrite the retrieval query while preserving the original user question
+- run hybrid dense + lexical retrieval
+- optionally rerank a widened candidate pool back down to `top_k`
 - pass retrieved chunks to the answer model
 
 ### Phase 1 answer generation rules
@@ -721,8 +726,8 @@ Each answer should include:
 5. `[x]` embedding call success
 6. `[x]` chat call success
 7. `[x]` SQLite + `sqlite-vec` availability
-8. `[~]` PDF extraction dependencies — currently hardcoded `True`. Real check would import `pypdf` and the OCR sidecar reader.
-9. `[~]` OCR dependency if OCR fallback is enabled — currently echoes `config.features.ocr_fallback` rather than checking that `tesseract` (or whatever OCR tooling is in use) is present.
+8. `[x]` PDF extraction dependencies via a real `pypdf` import check.
+9. `[x]` OCR mode reporting for the current sidecar OCR fallback path.
 
 ### Non-goals
 
@@ -771,7 +776,8 @@ This expands the project beyond the Phase 1 baseline while keeping the evaluatio
 
 Current note:
 - the local eval dataset and runner exist now
-- the current report covers retrieval hit rate, citation correctness, groundedness, answer-trait matching, and no-answer correctness
+- the current report covers retrieval hit rate, `precision@k`, `recall@k`, MRR, citation correctness, groundedness, answer-trait matching, and no-answer correctness
+- CI runs the full test suite plus an offline fixture-corpus eval gate via `config/ci_eval.yaml`
 
 ---
 
@@ -817,30 +823,29 @@ Build:
 - [x] the basic retrieve-then-read path is stable enough to serve as the baseline for Phase 2 comparisons
 
 Status:
-- the Phase 1 baseline is stable enough to use as the comparison point for Phase 2 work
-- remaining debt: reranking/query-rewrite/validation work, and the hardcoded PDF/OCR dependency checks
+- the baseline is stable enough to use as the comparison point for further retrieval and chunking work
+- remaining debt: broader eval coverage, stronger live-runtime regression coverage, and retrieval/chunking refinements justified by that coverage
 
-### Phase 2
+### Current next stage
 
-Add:
-- query rewriting
-- reranking
-- answer validation
-- eval CI gating and broader dataset coverage
+Add or improve:
+- broader real-world eval corpus coverage
+- live-model smoke/e2e coverage for the supported local runtime
+- retrieval and chunking refinements that are justified by eval deltas
 
-### Phase 2 exit criteria
+### Next-stage exit criteria
 
-- each advanced pattern can be toggled on and off independently
-- eval can compare baseline Phase 1 behavior against Phase 2 variants
-- regression coverage exists for any new failure modes introduced by rewriting, reranking, or validation
+- each current advanced pattern remains independently togglable
+- eval can compare the current baseline against future retrieval and chunking variants
+- regression coverage exists for rewriting, reranking, validation, and hybrid-retrieval failure modes
 
 ### Phase 3
 
 Possible later additions:
 - more file types
 - MCP server
-- hybrid retrieval
 - richer metadata filters
+- decomposition or multi-query retrieval for harder questions
 
 ---
 

@@ -152,6 +152,8 @@ The suite includes:
 - e2e tests
 - regression tests
 
+The repository also ships an offline CI eval path via [config/ci_eval.yaml](config/ci_eval.yaml) and [.github/workflows/ci.yml](.github/workflows/ci.yml), so retrieval and answer-quality regressions can be gated without live model endpoints.
+
 ## Storage
 
 Huginn stores:

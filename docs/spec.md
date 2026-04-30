@@ -24,21 +24,22 @@ The system is designed in two phases:
    - Extracts text page-by-page using `pypdf`.
    - Falls back to OCR sidecar text (`<filename>.ocr.txt`) when a page has no extractable text and `features.ocr_fallback` is enabled.
    - Chunks the extracted text with configurable size and overlap.
-  - Embeds chunks via the configured embedding model (or a lexical fallback).
+   - Embeds chunks via the configured embedding model (or a lexical fallback).
    - Persists metadata, chunk text, and vectors to SQLite.
 4. Reports counts: discovered, indexed, skipped, failed.
 
 ### 2.2 Query
 
 1. User asks a natural-language question via CLI.
-2. Huginn embeds the question.
-3. Optionally rewrites the retrieval query when `features.query_rewrite` is enabled, while preserving the original user question for answer generation.
-4. Retrieves top-k chunks by cosine similarity against stored vectors.
-5. Optionally reranks the retrieved candidates when `features.rerank` is enabled, using lexical overlap against the user question and then truncating back to `top_k`.
+2. Optionally rewrites the retrieval query when `features.query_rewrite` is enabled, while preserving the original user question for answer generation.
+3. Embeds the retrieval query when a real embedding model is configured.
+4. Retrieves chunks through hybrid dense + lexical retrieval, with threshold-based refusal of weak dense or lexical matches.
+5. Optionally reranks the retrieved candidates when `features.rerank` is enabled, using lexical overlap against the original user question and then truncating back to `top_k`.
 6. Generates an answer using the retrieved context:
    - with a chat model, it loads `config/prompts/answer.txt` and passes all retrieved chunk text as context;
    - without a chat model, it falls back to the top retrieved chunk verbatim.
-7. Returns the answer text, citations (file + page range), and an evidence note.
+7. Optionally validates the generated answer when `features.answer_validation` is enabled.
+8. Returns the answer text, citations (file + page range), and an evidence note.
 
 If no sufficiently relevant chunks are found, returns a safe no-answer response instead of fabricating one.
 
@@ -57,7 +58,7 @@ Three LangGraph `StateGraph` pipelines, each defined in `src/huginn/graph/`:
 | Graph | Nodes | Purpose |
 |---|---|---|
 | `ingest_graph` | `discover → ingest` | Walk folder, extract, chunk, embed, persist |
-| `query_graph` | `retrieve → answer` | Embed question, retrieve chunks, generate answer |
+| `query_graph` | `rewrite → retrieve → rerank → answer → validate` | Rewrite retrieval query, retrieve chunks, rerank candidates, generate answer, optionally validate output |
 | `eval_graph` | `run_cases → report` | Run eval cases through query graph, compute metrics |
 
 Each graph uses a `TypedDict` state and compiles to a linear (non-branching) flow. No agent tools, planners, or autonomous loops.
@@ -88,10 +89,13 @@ src/huginn/
 │   └── queries/             Named SQL files loaded on demand
 │
 ├── retrieve/
-│   └── basic.py            Embedding-based and lexical retrieval with cosine similarity
+│   ├── basic.py            Hybrid dense + lexical retrieval and lexical fallback
+│   ├── rewrite.py          Retrieval-query rewriting helpers
+│   └── rerank.py           Local reranking over retrieved candidates
 │
 ├── answer/
-│   └── generate.py         Chat-model grounded answer generation with citation formatting
+│   ├── generate.py         Chat-model grounded answer generation with citation formatting
+│   └── validate.py         Post-generation answer validation
 │
 ├── llm/
 │   ├── factory.py          Builds embedder + chat clients from config; Nomic prefix handling
@@ -192,7 +196,7 @@ vec_chunks (                              -- sqlite-vec virtual table (created o
 | State | TypedDict fields |
 |---|---|
 | `IngestState` | `config`, `db_path`, `embedder`, `reindex`, `discovered_files`, `result` |
-| `QueryState` | `config`, `db_path`, `question`, `embedder`, `chat_model`, `chunks`, `answer` |
+| `QueryState` | `config`, `db_path`, `question`, `retrieval_question`, `embedder`, `chat_model`, `chunks`, `answer` |
 | `EvalState` | `config`, `db_path`, `cases`, `embedder`, `chat_model`, `answers`, `report` |
 
 ---
@@ -304,7 +308,7 @@ Implemented in `retrieve/basic.py`. Two modes:
 ### 9.1 Hybrid Dense + Lexical Retrieval (default)
 
 When a real `Embedder` is provided:
-1. Embed the question via `embedder.embed_text(question, kind="query")`.
+1. Embed the retrieval query via `embedder.embed_text(question, kind="query")`.
 2. Query `vec_chunks` via sqlite-vec for a widened candidate set.
 3. Score lexical matches over chunk text for the same query.
 4. Fuse dense and lexical rankings via reciprocal rank fusion.
@@ -312,7 +316,7 @@ When a real `Embedder` is provided:
 
 ### 9.2 Lexical Retrieval
 
-When no embedder is provided, or when dense retrieval yields no acceptable matches:
+When no embedder is provided:
 1. Compute sparse bag-of-words vectors for the question and all stored chunks (stopword-filtered).
 2. Score via cosine similarity.
 3. Filter out matches below `indexing.min_lexical_score`, sort by score descending, return top-k.
@@ -496,8 +500,8 @@ huginn/
 │   ├── runtime.yaml
 │   └── prompts/
 │       ├── answer.txt
-│       ├── rewrite_query.txt           # Phase 2 placeholder
-│       └── validate_answer.txt         # Phase 2 placeholder
+│       ├── rewrite_query.txt           # retrieval-query rewrite prompt
+│       └── validate_answer.txt         # answer-support validation prompt
 ├── docs/
 │   ├── PLAN.md
 │   ├── spec.md

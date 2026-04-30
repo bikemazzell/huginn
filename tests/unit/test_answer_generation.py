@@ -165,3 +165,32 @@ def test_generate_answer_prefers_narrower_overlapping_chat_citation() -> None:
     )
 
     assert answer.citations == ["german-course.pdf#page=50"]
+
+
+def test_generate_answer_prefers_overlapping_chunk_with_visible_page_label() -> None:
+    chat = DummyChatModel("The phone number is 020 7873 6400.")
+
+    answer = generate_answer(
+        "What is the phone number?",
+        [
+            RetrievedChunk(
+                chunk_id=1,
+                source_path="/tmp/german-course.pdf",
+                page_start=49,
+                page_end=50,
+                text="MT FOUNDATION COURSE GERMAN Page 47 Call: 020 7873 6400",
+                score=0.9,
+            ),
+            RetrievedChunk(
+                chunk_id=2,
+                source_path="/tmp/german-course.pdf",
+                page_start=50,
+                page_end=50,
+                text="Call: 020 7873 6400",
+                score=0.8,
+            ),
+        ],
+        chat_model=chat,
+    )
+
+    assert answer.citations == ["german-course.pdf#page=47"]

@@ -39,8 +39,9 @@ The system is designed in two phases:
    - with a chat model, it loads `config/prompts/answer.txt` and passes all retrieved chunk text as context;
    - without a chat model, it falls back to the top retrieved chunk verbatim.
 7. For chat-model answers, filters citations down to chunks that support the final answer text and collapses overlapping same-source citations toward the narrower page range.
-8. Optionally validates the generated answer when `features.answer_validation` is enabled.
-9. Returns the answer text, citations (file + page range), and an evidence note.
+8. When a supporting chunk contains an explicit visible page marker such as `Page 47`, that printed page label is preferred over the raw PDF page index in the final citation.
+9. Optionally validates the generated answer when `features.answer_validation` is enabled.
+10. Returns the answer text, citations (file + page range), and an evidence note.
 
 If no sufficiently relevant chunks are found, returns a safe no-answer response instead of fabricating one.
 
@@ -350,7 +351,7 @@ Implemented in `answer/generate.py`.
 2. Otherwise, keep the top-ranked chunk as the fallback answer source.
 3. If a `ChatModel` is available, load `config/prompts/answer.txt` and call it with all retrieved chunk text as context.
 4. If no chat model is available, return the top chunk text verbatim as the answer.
-5. Format citations as `<filename>#page=<N>` or `<filename>#pages=<N>-<M>`.
+5. Format citations as `<filename>#page=<N>` or `<filename>#pages=<N>-<M>`, preferring visible printed page labels from the chunk text when available.
 6. Return `QueryAnswer` with `answer_text`, `citations`, and `evidence_note`.
    - chat path: include citations only for chunks that support the final answer text, collapsing overlapping same-source citations toward the narrower page span when possible;
    - fallback path: cite only the top chunk that supplied the answer text.
